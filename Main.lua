@@ -68,23 +68,46 @@ end)
 -- ============================================================================
 -- LIBRARY (UE lib — PhonkWare + UE source ship with this one)
 -- ============================================================================
-do
-    local body = game:HttpGet("https://raw.githubusercontent.com/Anonymus23231/thing/refs/heads/main/Lib")
-    local chunk, err = loadstring(body .. [[
+local libSources = {
+    "https://raw.githubusercontent.com/Anonymus23231/thing/refs/heads/main/Lib",
+    "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/Library.lua",
+}
 
-getgenv().ThemeManager = ThemeManager
-getgenv().SaveManager = SaveManager
-getgenv().Trove = Trove
+local libLoaded = false
+local libErrors = {}
+for _, src in ipairs(libSources) do
+    local ok, err = pcall(function()
+        local body = game:HttpGet(src)
+        local chunk, cErr = loadstring(body .. [[
+
+if ThemeManager then getgenv().ThemeManager = ThemeManager end
+if SaveManager then getgenv().SaveManager = SaveManager end
+if Trove then getgenv().Trove = Trove end
+if Library then getgenv().Library = Library end
 ]])
-    assert(chunk, "[UEV3] lib compile failed: "..tostring(err))
-    local ok, runErr = pcall(chunk)
-    assert(ok, "[UEV3] lib run failed: "..tostring(runErr))
+        if not chunk then error(cErr) end
+        chunk()
+        if not getgenv().Library then
+            error("Library not registered")
+        end
+    end)
+    if ok and getgenv().Library then
+        libLoaded = true
+        break
+    else
+        libErrors[#libErrors+1] = tostring(err)
+    end
+end
+
+if not libLoaded then
+    warn("[UEV3] all lib sources failed: "..table.concat(libErrors, " | "))
+    getgenv().UEV3_LOADED = nil
+    error("[UEV3] GUI library could not be loaded")
 end
 
 local Library      = getgenv().Library
 local ThemeManager = getgenv().ThemeManager
 local SaveManager  = getgenv().SaveManager
-assert(Library, "[UEV3] Library missing")
 
 Library.AccentColor     = Color3.fromRGB(196, 30, 58)
 Library.BackgroundColor = Color3.fromRGB(13, 13, 15)
@@ -450,6 +473,7 @@ end
 
 local lockedLast
 bin(RunService.RenderStepped:Connect(function()
+  pcall(function()
     if S.aimbot.enable and S.aimbot.show_fov then
         aimCircle.Visible = true
         aimCircle.Radius  = S.aimbot.fov
@@ -487,6 +511,7 @@ bin(RunService.RenderStepped:Connect(function()
         lockedLast = tgt
         pcall(function() playSound(3779005184, 0.6, 1) end)
     end
+  end)
 end))
 
 -- ============================================================================
@@ -528,12 +553,14 @@ silentCircle.Thickness=1 silentCircle.NumSides=64 silentCircle.Filled=false sile
 bin(silentCircle)
 
 bin(RunService.RenderStepped:Connect(function()
+  pcall(function()
     if S.silent.enable and S.silent.show_fov then
         silentCircle.Visible = true
         silentCircle.Radius  = S.silent.fov
         silentCircle.Color   = S.silent.fov_color
         silentCircle.Position= Camera.ViewportSize / 2
     else silentCircle.Visible = false end
+  end)
 end))
 
 local function silentTarget()
@@ -725,6 +752,7 @@ local function hideEsp(e)
 end
 
 bin(RunService.RenderStepped:Connect(function()
+  pcall(function()
     if not S.esp.enable then
         for _, e in pairs(espCache) do hideEsp(e) end
         return
@@ -878,6 +906,7 @@ bin(RunService.RenderStepped:Connect(function()
             end
         end
     end
+  end)
 end))
 
 Players.PlayerRemoving:Connect(killEsp)
@@ -894,6 +923,7 @@ bin(xhairCircle)
 
 local xhairT = 0
 bin(RunService.RenderStepped:Connect(function(dt)
+  pcall(function()
     xhairT = xhairT + dt
     if not S.crosshair.enable then
         for _,l in ipairs(xhairLines) do l.Visible=false end
@@ -919,35 +949,42 @@ bin(RunService.RenderStepped:Connect(function(dt)
     if S.crosshair.dot then
         xhairDot.Position=c xhairDot.Color=S.crosshair.dot_color xhairDot.Visible=true
     else xhairDot.Visible=false end
+  end)
 end))
 
 -- ============================================================================
 -- CHARACTER
 -- ============================================================================
 bin(RunService.Heartbeat:Connect(function()
-    local hum = getHum() if not hum then return end
-    if S.character.ws_e then hum.WalkSpeed = S.character.ws_v end
-    if S.character.jp_e then hum.UseJumpPower=true hum.JumpPower=S.character.jp_v end
-    if S.character.hip_e then hum.HipHeight = S.character.hip_v end
-    if S.character.gv_e then Workspace.Gravity = S.character.gv_v end
-    if S.character.bhop and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-        if hum:GetState() == Enum.HumanoidStateType.Landed or hum.FloorMaterial ~= Enum.Material.Air then
-            hum.Jump = true
-        end
-    end
-    if S.character.god then pcall(function() hum.Health = hum.MaxHealth end) end
-    if S.character.heal_e then pcall(function() hum.Health = math.min(hum.Health + S.character.heal_r, hum.MaxHealth) end) end
-    if S.character.hitbox_e then
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LocalPlayer and alive(plr) then
-                local part = plr.Character:FindFirstChild(S.character.hitbox_p)
-                if part then
-                    part.Size = Vector3.new(S.character.hitbox_s, S.character.hitbox_s, S.character.hitbox_s)
-                    part.CanCollide = false part.Transparency = 0.7
+    pcall(function()
+        local hum = getHum() if not hum then return end
+        if S.character.ws_e then pcall(function() hum.WalkSpeed = S.character.ws_v end) end
+        if S.character.jp_e then pcall(function() hum.UseJumpPower=true hum.JumpPower=S.character.jp_v end) end
+        if S.character.hip_e then pcall(function() hum.HipHeight = S.character.hip_v end) end
+        if S.character.gv_e then pcall(function() Workspace.Gravity = S.character.gv_v end) end
+        if S.character.bhop and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            pcall(function()
+                if hum:GetState() == Enum.HumanoidStateType.Landed or hum.FloorMaterial ~= Enum.Material.Air then
+                    hum.Jump = true
                 end
+            end)
+        end
+        if S.character.god then pcall(function() hum.Health = hum.MaxHealth end) end
+        if S.character.heal_e then pcall(function() hum.Health = math.min(hum.Health + S.character.heal_r, hum.MaxHealth) end) end
+        if S.character.hitbox_e then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                pcall(function()
+                    if plr ~= LocalPlayer and alive(plr) then
+                        local part = plr.Character:FindFirstChild(S.character.hitbox_p)
+                        if part then
+                            part.Size = Vector3.new(S.character.hitbox_s, S.character.hitbox_s, S.character.hitbox_s)
+                            part.CanCollide = false part.Transparency = 0.7
+                        end
+                    end
+                end)
             end
         end
-    end
+    end)
 end))
 
 bin(UserInputService.JumpRequest:Connect(function()
@@ -967,45 +1004,47 @@ end
 LocalPlayer.CharacterAdded:Connect(destroyFly)
 
 bin(RunService.Heartbeat:Connect(function()
-    if S.movement.fly_e then
-        local hrp = getHRP() if not hrp then return end
-        if not flyBV then
-            flyBV = Instance.new("BodyVelocity") flyBV.MaxForce=Vector3.new(1e9,1e9,1e9) flyBV.Parent=hrp
-            flyBG = Instance.new("BodyGyro") flyBG.MaxTorque=Vector3.new(1e9,1e9,1e9) flyBG.P=1e5 flyBG.Parent=hrp
-        end
-        flyBG.CFrame = Camera.CFrame
-        local move = Vector3.zero
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += Camera.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= Camera.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= Camera.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += Camera.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.new(0,1,0) end
-        flyBV.Velocity = (move.Magnitude > 0 and move.Unit or Vector3.zero) * S.movement.fly_s
-    else destroyFly() end
+    pcall(function()
+        if S.movement.fly_e then
+            local hrp = getHRP() if not hrp then return end
+            if not flyBV or not flyBV.Parent then
+                flyBV = Instance.new("BodyVelocity") flyBV.MaxForce=Vector3.new(1e9,1e9,1e9) flyBV.Parent=hrp
+                flyBG = Instance.new("BodyGyro") flyBG.MaxTorque=Vector3.new(1e9,1e9,1e9) flyBG.P=1e5 flyBG.Parent=hrp
+            end
+            flyBG.CFrame = Camera.CFrame
+            local move = Vector3.zero
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= Camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= Camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += Camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.new(0,1,0) end
+            flyBV.Velocity = (move.Magnitude > 0 and move.Unit or Vector3.zero) * S.movement.fly_s
+        else destroyFly() end
 
-    if S.movement.noclip_e or (S.movement.fly_e and S.movement.fly_nc) then
-        local c = getChar()
-        if c then
-            for _,p in ipairs(c:GetDescendants()) do
-                if p:IsA("BasePart") then p.CanCollide=false end
+        if S.movement.noclip_e or (S.movement.fly_e and S.movement.fly_nc) then
+            local c = getChar()
+            if c then
+                for _,p in ipairs(c:GetDescendants()) do
+                    if p:IsA("BasePart") then pcall(function() p.CanCollide=false end) end
+                end
             end
         end
-    end
 
-    if S.movement.avoid_e then
-        local hrp = getHRP()
-        if hrp and hrp.Position.Y < S.movement.avoid_f then
-            hrp.CFrame = CFrame.new(0, S.movement.avoid_t, 0) * (hrp.CFrame - hrp.CFrame.Position)
+        if S.movement.avoid_e then
+            local hrp = getHRP()
+            if hrp and hrp.Position.Y < S.movement.avoid_f then
+                hrp.CFrame = CFrame.new(0, S.movement.avoid_t, 0) * (hrp.CFrame - hrp.CFrame.Position)
+            end
         end
-    end
 
-    if S.movement.slowfall_e then
-        local hrp = getHRP()
-        if hrp and hrp.AssemblyLinearVelocity.Y < -5 then
-            hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, -S.movement.slowfall_s/10, hrp.AssemblyLinearVelocity.Z)
+        if S.movement.slowfall_e then
+            local hrp = getHRP()
+            if hrp and hrp.AssemblyLinearVelocity.Y < -5 then
+                hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, -S.movement.slowfall_s/10, hrp.AssemblyLinearVelocity.Z)
+            end
         end
-    end
+    end)
 end))
 
 local function pickMovementTarget(method)
@@ -1048,6 +1087,7 @@ local function ensureEffect(name, class)
 end
 
 bin(RunService.RenderStepped:Connect(function()
+  pcall(function()
     if S.world.fov_e then Camera.FieldOfView = S.world.fov_v end
 
     local atm = ensureEffect("UEV3_Atmosphere","Atmosphere")
@@ -1100,6 +1140,7 @@ bin(RunService.RenderStepped:Connect(function()
     if S.world.amb_e then Lighting.Ambient = S.world.amb_color Lighting.OutdoorAmbient = S.world.amb_color end
     if S.world.time_e then Lighting.ClockTime = S.world.time_h end
     if S.world.fog_e then Lighting.FogEnd = 1e6 end
+  end)
 end))
 
 -- ============================================================================
@@ -1205,21 +1246,32 @@ wmLabel.TextSize = 13 wmLabel.TextXAlignment = Enum.TextXAlignment.Left
 wmLabel.Parent = wmFrame
 
 local wmTick = 0
+local wmFpsAvg = 60
+local wmLastFrame = tick()
+bin(RunService.RenderStepped:Connect(function()
+    local now = tick()
+    local dt = now - wmLastFrame
+    wmLastFrame = now
+    if dt > 0 then wmFpsAvg = wmFpsAvg * 0.9 + (1/dt) * 0.1 end
+end))
 bin(RunService.Heartbeat:Connect(function(dt)
-    wmTick = wmTick + dt
-    if wmTick < 0.25 then return end wmTick = 0
-    if not S.misc.wm_e then wmGui.Enabled=false return end
-    wmGui.Enabled = true
-    local fps = math.floor(1 / math.max(RunService.RenderStepped:Wait(), 0.001))
-    local ping = math.floor(LocalPlayer:GetNetworkPing() * 1000)
-    wmLabel.Text = string.format(" UE V3 | %d fps | %d ms | %s", fps, ping, os.date("%H:%M:%S"))
-    local positions = {
-        top_left     = UDim2.new(0, 10, 0, 10),
-        top_right    = UDim2.new(1, -290, 0, 10),
-        bottom_left  = UDim2.new(0, 10, 1, -34),
-        bottom_right = UDim2.new(1, -290, 1, -34),
-    }
-    wmFrame.Position = positions[S.misc.wm_pos] or positions.top_left
+    local ok, err = pcall(function()
+        wmTick = wmTick + dt
+        if wmTick < 0.25 then return end
+        wmTick = 0
+        if not S.misc.wm_e then wmGui.Enabled=false return end
+        wmGui.Enabled = true
+        local fps = math.floor(wmFpsAvg)
+        local ping = math.floor((LocalPlayer:GetNetworkPing() or 0) * 1000)
+        wmLabel.Text = string.format(" UE V3 | %d fps | %d ms | %s", fps, ping, os.date("%H:%M:%S"))
+        local positions = {
+            top_left     = UDim2.new(0, 10, 0, 10),
+            top_right    = UDim2.new(1, -290, 0, 10),
+            bottom_left  = UDim2.new(0, 10, 1, -34),
+            bottom_right = UDim2.new(1, -290, 1, -34),
+        }
+        wmFrame.Position = positions[S.misc.wm_pos] or positions.top_left
+    end)
 end))
 
 -- ============================================================================
