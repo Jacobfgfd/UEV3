@@ -1,467 +1,714 @@
--- ============================================================================
--- Unnamed Enhancements V3  |  Rivals
--- UE skin · full stack · defensive GUI build
--- Built by Olivia — https://discord.gg/ojailbreaks
--- ============================================================================
---!nocheck
---!native
+--[[
+    Unnamed Enhancements V6 — standalone, lazy, AC-safe, pixel UI
+    Built by Olivia — https://discord.gg/ojailbreaks
+--]]
+
+if getgenv().UEV6 and getgenv().UEV6.Unload then pcall(getgenv().UEV6.Unload) end
 
 local HttpService      = game:GetService("HttpService")
+local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Players          = game:GetService("Players")
-local Lighting         = game:GetService("Lighting")
-local ReplicatedStorage= game:GetService("ReplicatedStorage")
-local CollectionService= game:GetService("CollectionService")
 local TweenService     = game:GetService("TweenService")
-local SoundService     = game:GetService("SoundService")
-local VirtualUser      = game:GetService("VirtualUser")
-local TeleportService  = game:GetService("TeleportService")
-local Debris           = game:GetService("Debris")
-local Workspace        = workspace
+local Lighting         = game:GetService("Lighting")
+local Workspace        = game:GetService("Workspace")
+local VirtualInput     = game:GetService("VirtualInputManager")
+local CoreGui          = game:GetService("CoreGui")
+local Camera           = Workspace.CurrentCamera
+local LP               = Players.LocalPlayer
 
-local LocalPlayer = Players.LocalPlayer
-local Camera      = Workspace.CurrentCamera
-local Mouse       = LocalPlayer:GetMouse()
-
-if getgenv().UEV3_LOADED then
-    pcall(function() getgenv().UEV3_UNLOAD() end)
-end
-getgenv().UEV3_LOADED = true
-
--- ============================================================================
--- ANTIDETECT
--- ============================================================================
-pcall(function()
-    if not (hookfunction and newcclosure and getcallingscript) then return end
-    local real_setmt
-    real_setmt = hookfunction(setmetatable, newcclosure(function(t, mt)
-        if type(mt) == "table" and rawget(mt, "__mode") == "kv" then
-            local s = getcallingscript()
-            if s and (s.Name == "MiscellaneousController" or s.Name:lower():find("anticheat")) then
-                return real_setmt(t, {})
-            end
-        end
-        return real_setmt(t, mt)
-    end))
-end)
-
-task.spawn(function()
-    pcall(function()
-        local kill = {"anticheat","detection","ban","kick","security","moderation","report"}
-        local function sweep(d)
-            if d:IsA("LocalScript") or d:IsA("ModuleScript") then
-                local n = d.Name:lower()
-                for _,k in ipairs(kill) do
-                    if n:find(k,1,true) then pcall(function() d.Disabled = true end) break end
-                end
-            end
-        end
-        game.DescendantAdded:Connect(function(d) pcall(sweep,d) end)
-        for i,d in ipairs(game:GetDescendants()) do
-            pcall(sweep,d)
-            if i % 4000 == 0 then task.wait() end
-        end
-    end)
-end)
-
--- ============================================================================
--- LIBRARY (UE lib — PhonkWare + UE source ship with this one)
--- ============================================================================
-local libSources = {
-    "https://raw.githubusercontent.com/Anonymus23231/thing/refs/heads/main/Lib",
-    "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/Library.lua",
-}
-
-local libLoaded = false
-local libErrors = {}
-for _, src in ipairs(libSources) do
-    local ok, err = pcall(function()
-        local body = game:HttpGet(src)
-        local chunk, cErr = loadstring(body .. [[
-
-if ThemeManager then getgenv().ThemeManager = ThemeManager end
-if SaveManager then getgenv().SaveManager = SaveManager end
-if Trove then getgenv().Trove = Trove end
-if Library then getgenv().Library = Library end
-]])
-        if not chunk then error(cErr) end
-        chunk()
-        if not getgenv().Library then
-            error("Library not registered")
-        end
-    end)
-    if ok and getgenv().Library then
-        libLoaded = true
-        break
-    else
-        libErrors[#libErrors+1] = tostring(err)
-    end
-end
-
-if not libLoaded then
-    warn("[UEV3] all lib sources failed: "..table.concat(libErrors, " | "))
-    getgenv().UEV3_LOADED = nil
-    error("[UEV3] GUI library could not be loaded")
-end
-
-local Library      = getgenv().Library
-local ThemeManager = getgenv().ThemeManager
-local SaveManager  = getgenv().SaveManager
-
-Library.AccentColor     = Color3.fromRGB(196, 30, 58)
-Library.BackgroundColor = Color3.fromRGB(13, 13, 15)
-Library.MainColor       = Color3.fromRGB(20, 20, 23)
-Library.OutlineColor    = Color3.fromRGB(45, 45, 50)
-Library.FontColor       = Color3.fromRGB(235, 235, 240)
-
-local function uiScale()
-    local cam = Workspace.CurrentCamera
-    local vp = cam and cam.ViewportSize or Vector2.new(1920, 1080)
-    return math.clamp(math.min(vp.X / 1920, vp.Y / 1080), 0.5, 1.4)
-end
-local _scale = uiScale()
-
-local Window = Library:CreateWindow({
-    Title     = "Unnamed Enhancements V3  |  https://discord.gg/ojailbreaks",
-    SubTitle  = "Rivals · Cracked",
-    Center    = true,
-    AutoShow  = true,
-    Resizable = true,
-    Draggable = true,
-    TabPadding = 8,
-    MenuFadeTime = 0.2,
-    Size      = UDim2.fromOffset(math.floor(740 * _scale), math.floor(660 * _scale)),
-})
-
-pcall(function()
-    local sg = Library.ScreenGui
-    if sg then
-        local old = sg:FindFirstChild("UEV3_UIScale") if old then old:Destroy() end
-        local s = Instance.new("UIScale") s.Name="UEV3_UIScale" s.Scale=_scale s.Parent=sg
-    end
-end)
-
-local Tabs = {}
-local tabNames = {"Rage","Legit","Visuals","World","Character","Movement","Misc","Scripts","Spoofer","Optim","Config"}
-for _, n in ipairs(tabNames) do
-    local ok, t = pcall(function() return Window:AddTab(n) end)
-    if ok then Tabs[n] = t end
-end
-
--- ============================================================================
--- DEFENSIVE GUI HELPERS
--- ============================================================================
-local function LGroup(tab, name)
-    if not tab then return nil end
-    local ok, g = pcall(function() return tab:AddLeftGroupbox(name) end)
-    if ok then return g end
-    return nil
-end
-
-local function RGroup(tab, name)
-    if not tab then return nil end
-    local ok, g = pcall(function() return tab:AddRightGroupbox(name) end)
-    if ok then return g end
-    return nil
-end
-
-local function Toggle(g, id, text, default, cb)
-    if not g then return end
-    local ok, t = pcall(function()
-        return g:AddToggle(id, { Text = text, Default = default and true or false })
-    end)
-    if not ok or not t then return end
-    if cb then
-        pcall(function()
-            t:OnChanged(function() cb(t.Value) end)
-        end)
-    end
-    return t
-end
-
-local function Slider(g, id, text, def, min, max, rounding, cb)
-    if not g then return end
-    local ok, s = pcall(function()
-        return g:AddSlider(id, {
-            Text = text, Default = def, Min = min, Max = max, Rounding = rounding or 0,
-        })
-    end)
-    if not ok or not s then return end
-    if cb then
-        pcall(function()
-            s:OnChanged(function() cb(s.Value) end)
-        end)
-    end
-    return s
-end
-
-local function Dropdown(g, id, text, values, default, cb)
-    if not g then return end
-    local ok, d = pcall(function()
-        return g:AddDropdown(id, { Text = text, Values = values, Default = default })
-    end)
-    if not ok or not d then return end
-    if cb then
-        pcall(function()
-            d:OnChanged(function() cb(d.Value) end)
-        end)
-    end
-    return d
-end
-
-local function Input(g, id, text, default, cb)
-    if not g then return end
-    local ok, i = pcall(function()
-        return g:AddInput(id, { Text = text, Default = default or "", Numeric = false })
-    end)
-    if not ok or not i then return end
-    if cb then
-        pcall(function()
-            i:OnChanged(function() cb(i.Value) end)
-        end)
-    end
-    return i
-end
-
-local function Label(g, text)
-    if not g then return end
-    pcall(function() g:AddLabel(text) end)
-end
-
-local function Button(g, text, cb)
-    if not g then return end
-    pcall(function() g:AddButton(text, cb) end)
-end
-
-local function ColorPicker(g, id, text, default, cb)
-    if not g then return end
-    -- try label-chained first (linoria style), then direct (phonkware style)
-    local ok1, c = pcall(function()
-        local l = g:AddLabel(text)
-        return l:AddColorPicker(id, { Default = default })
-    end)
-    if not ok1 or not c then
-        local ok2, c2 = pcall(function()
-            return g:AddColorPicker(id, { Default = default, Title = text })
-        end)
-        if ok2 then c = c2 end
-    end
-    if c and cb then
-        pcall(function()
-            c:OnChanged(function() cb(c.Value) end)
-        end)
-    end
-    return c
-end
-
-local function KeyPicker(g, id, text, default, mode, cb)
-    if not g then return end
-    -- try label-chained, then direct
-    local ok1, k = pcall(function()
-        local l = g:AddLabel(text)
-        return l:AddKeyPicker(id, { Default = default, Mode = mode or "Toggle", Text = text })
-    end)
-    if not ok1 or not k then
-        local ok2, k2 = pcall(function()
-            return g:AddKeyPicker(id, { Default = default, Mode = mode or "Toggle", Text = text })
-        end)
-        if ok2 then k = k2 end
-    end
-    return k
-end
-
--- ============================================================================
+------------------------------------------------------
 -- STATE
--- ============================================================================
-getgenv().UEV3 = {
-    aimbot = { enable=false, show_fov=true, fov=180, fov_color=Color3.fromRGB(196,30,58),
-               smoothing=3, visible_only=false, team_check=true, hit_part="Head",
-               prediction=0.165, snapline=false, snapline_color=Color3.fromRGB(255,255,255),
-               lock_sound=false, max_dist=1500 },
-    silent = { enable=false, show_fov=true, fov=300, fov_color=Color3.fromRGB(255,255,255),
-               hit_part="Head", team_check=true, hitchance=70 },
-    ragebot = { enable=false, autoshoot=true, autoscope=true, tp_duration=0.15, y_offset=3,
-                team_check=true, prediction=true, hitchance=70, force_body=false,
-                max_range=2000, priority="distance" },
-    triggerbot = { enable=false, team_check=true, reaction=0.05, delay=0.1, max_dist=600,
-                   headshot_only=false, burst=false },
-    anti_aim = { enable=false, pitch="Down", yaw="Spin", yaw_speed=6 },
-    esp = {
-        enable=false, team_check=true, max_dist=1000,
-        box_e=true, box_color=Color3.fromRGB(196,30,58), box_outline=true,
-        name_e=true, name_color=Color3.fromRGB(255,255,255), name_display=true,
-        hp_e=true, hp_color=Color3.fromRGB(80,220,80), hp_bar=true, hp_grad=true,
-        dist_e=true, dist_color=Color3.fromRGB(200,200,200),
-        wep_e=false, wep_color=Color3.fromRGB(255,215,120),
-        tracer_e=false, tracer_color=Color3.fromRGB(196,30,58), tracer_origin="bottom",
-        dot_e=false, dot_color=Color3.fromRGB(255,255,255),
-        skel_e=false, skel_color=Color3.fromRGB(255,255,255),
-        hl_e=true, hl_fill=Color3.fromRGB(196,30,58), hl_fill_t=0.5,
-        hl_outline=Color3.fromRGB(255,255,255), hl_outline_t=0,
-        chams_e=false, chams_mat="ForceField", chams_color=Color3.fromRGB(196,30,58), chams_t=0,
-        arrow_e=false, arrow_color=Color3.fromRGB(196,30,58), arrow_radius=200,
+------------------------------------------------------
+local V6 = {
+    Opt={}, Tog={}, Keys={}, Conns={}, Draws={}, Ghosts={}, ESP={},
+    State={
+        target=nil, aimPos=nil, hitChance=0, lastShot=0, lastSwitch=0, lastKillAt=0,
+        shotsBucket={}, resolver={}, backtrack={}, selfPath={},
+        desyncYaw=0, onShotUntil=0, defUntil=0, aaSide=1,
+        chokeCounter=0, choke=0,
+        stats={shots=0,hits=0,kills=0,start=os.clock()},
+        origFog=Lighting.FogEnd, origBright=Lighting.Brightness,
     },
-    crosshair = { enable=false, length=6, thickness=1, gap=3, color=Color3.fromRGB(0,255,170),
-                  outline=true, outline_color=Color3.fromRGB(0,0,0),
-                  dot=false, dot_color=Color3.fromRGB(255,255,255),
-                  rainbow=false, pulse=false, circle=false, circle_radius=14 },
-    world = {
-        fov_e=false, fov_v=90,
-        atm_e=false, atm_d=0.3, atm_o=0.25, atm_glare=0.2, atm_haze=1.5,
-        atm_color=Color3.fromRGB(180,100,100), atm_decay=Color3.fromRGB(80,20,20),
-        cc_e=false, cc_br=0, cc_con=0.15, cc_sat=0.1, cc_tint=Color3.fromRGB(255,220,220),
-        bloom_e=false, bloom_i=0.4, bloom_s=24, bloom_t=2,
-        blur_e=false, blur_s=0,
-        sunrays_e=false, sunrays_i=0.25,
-        dof_e=false, dof_f=5,
-        time_e=false, time_h=12,
-        fog_e=false,
-        sky_e=false, sky_preset="DeepSpace", sky_rs=false, sky_rm=false, sky_rst=false,
-        amb_e=false, amb_color=Color3.fromRGB(128,128,128),
-    },
-    character = {
-        ws_e=false, ws_v=20, jp_e=false, jp_v=60, gv_e=false, gv_v=196,
-        hip_e=false, hip_v=2, infj=false, bhop=false, god=false,
-        heal_e=false, heal_r=1, nofall=false, instrst=false,
-        hitbox_e=false, hitbox_s=5, hitbox_p="Head",
-    },
-    movement = {
-        fly_e=false, fly_s=50, fly_nc=false, noclip_e=false,
-        tp_method="closest", tp_y=0, tp_team=true, tp_pred=true,
-        ug_e=false, ug_d=5.8, avoid_e=false, avoid_f=-50, avoid_t=0,
-        slowfall_e=false, slowfall_s=100,
-    },
-    misc = {
-        gm_e=false, gm_recoil=true, gm_spread=true, gm_cd=true, gm_os=false, gm_proj=0,
-        hs_e=false, hs_id="hitmarker", hs_v=1, hs_p=1, hs_custom="",
-        ks_e=false, ks_id="rust", ks_v=1,
-        wm_e=true, wm_pos="top_left",
-        kf_e=false, notif=true, afk=true,
-        auto_accept=false, auto_ready=false,
-    },
-    spoofer = { name_e=false, name_v="", display_e=false, display_v="",
-                level_e=false, level_v=9, streak_e=false, streak_v=9,
-                rank_e=false, rank_v="GM", wins_e=false, wins_v=9999 },
-    optim = { no_part=false, no_shad=false, no_tex=false, low_q=false, no_snd=false,
-              fps_cap_e=false, fps_cap=240, no_mesh=false, destroy_fx=false },
-    panic = { key="End" },
 }
-local S = getgenv().UEV3
-local Trash = {}
-local function bin(x) Trash[#Trash+1] = x return x end
+getgenv().UEV6 = V6
+local O,T,K,S = V6.Opt, V6.Tog, V6.Keys, V6.State
+local function C(c) table.insert(V6.Conns,c); return c end
+local function D(d) table.insert(V6.Draws,d); return d end
+local function safe(f,...) local ok,r=pcall(f,...); if ok then return r end end
 
--- ============================================================================
--- HELPERS
--- ============================================================================
-local function getChar() return LocalPlayer.Character end
-local function getHRP() local c=getChar() return c and c:FindFirstChild("HumanoidRootPart") end
-local function getHum() local c=getChar() return c and c:FindFirstChildOfClass("Humanoid") end
+------------------------------------------------------
+-- THEME (pixel)
+------------------------------------------------------
+local TH = {
+    bg=Color3.fromRGB(8,8,12), bg2=Color3.fromRGB(12,12,18),
+    pn=Color3.fromRGB(18,18,26), pn2=Color3.fromRGB(24,24,34), pn3=Color3.fromRGB(32,32,44),
+    st=Color3.fromRGB(55,55,80), stHi=Color3.fromRGB(140,90,255),
+    tx=Color3.fromRGB(240,240,250), sub=Color3.fromRGB(140,140,170), dim=Color3.fromRGB(85,85,105),
+    ac=Color3.fromRGB(180,100,255), ac2=Color3.fromRGB(255,80,200),
+    gd=Color3.fromRGB(80,230,160), bd=Color3.fromRGB(255,80,110), wn=Color3.fromRGB(255,200,80),
+    px=Enum.Font.Arcade, mo=Enum.Font.Code,
+}
+local function N(cls,p) local i=Instance.new(cls); for k,v in pairs(p or {}) do i[k]=v end; return i end
+local function cr(p,r) N("UICorner",{CornerRadius=UDim.new(0,r or 3),Parent=p}) end
+local function sk(p,c,t) N("UIStroke",{Color=c or TH.st,Thickness=t or 1,Parent=p,ApplyStrokeMode=Enum.ApplyStrokeMode.Border}) end
+local function pd(p,l,r,t,b) N("UIPadding",{PaddingLeft=UDim.new(0,l or 0),PaddingRight=UDim.new(0,r or l or 0),PaddingTop=UDim.new(0,t or l or 0),PaddingBottom=UDim.new(0,b or l or 0),Parent=p}) end
 
-local function isTeammate(plr)
-    local a, b = plr:GetAttribute("TeamID"), LocalPlayer:GetAttribute("TeamID")
-    if a and b then return a == b end
-    return plr.Team and LocalPlayer.Team and plr.Team == LocalPlayer.Team
+------------------------------------------------------
+-- GUI
+------------------------------------------------------
+local Screen = N("ScreenGui",{IgnoreGuiInset=true,ResetOnSpawn=false,ZIndexBehavior=Enum.ZIndexBehavior.Sibling,DisplayOrder=1e5})
+local ok = pcall(function()
+    if syn and syn.protect_gui then syn.protect_gui(Screen) end
+    if gethui then Screen.Parent=gethui() else Screen.Parent=CoreGui end
+end)
+if not ok then Screen.Parent = LP:WaitForChild("PlayerGui") end
+Screen.Name = "UEV6_"..math.random(1e5,1e6-1)
+V6.Screen = Screen
+
+local Root = N("Frame",{Size=UDim2.fromOffset(880,580),Position=UDim2.new(0.5,-440,0.5,-290),BackgroundColor3=TH.bg,BorderSizePixel=0,Parent=Screen})
+cr(Root,6); sk(Root,TH.ac,1)
+
+-- title
+local tb = N("Frame",{Size=UDim2.new(1,0,0,40),BackgroundColor3=TH.pn,BorderSizePixel=0,Parent=Root}); cr(tb,6)
+N("Frame",{Size=UDim2.new(1,0,0,14),Position=UDim2.new(0,0,1,-14),BackgroundColor3=TH.pn,BorderSizePixel=0,Parent=tb})
+local chip = N("Frame",{Size=UDim2.fromOffset(20,20),Position=UDim2.fromOffset(12,10),BackgroundColor3=TH.ac,BorderSizePixel=0,Parent=tb}); cr(chip,2)
+N("Frame",{Size=UDim2.fromOffset(6,6),Position=UDim2.fromOffset(7,7),BackgroundColor3=TH.bg,BorderSizePixel=0,Parent=chip})
+N("TextLabel",{Size=UDim2.new(1,-240,1,0),Position=UDim2.new(0,42,0,0),BackgroundTransparency=1,Text="UNNAMED ENHANCEMENTS  V6  ::  olivia  ::  discord.gg/ojailbreaks",TextColor3=TH.tx,Font=TH.px,TextSize=14,TextXAlignment=Enum.TextXAlignment.Left,Parent=tb})
+local accLine = N("Frame",{Size=UDim2.new(1,-24,0,2),Position=UDim2.new(0,12,1,-4),BackgroundColor3=TH.ac,BorderSizePixel=0,Parent=tb})
+N("UIGradient",{Color=ColorSequence.new{ColorSequenceKeypoint.new(0,TH.ac),ColorSequenceKeypoint.new(1,TH.ac2)},Parent=accLine})
+
+local function winBtn(sym,col,x,cb)
+    local b=N("TextButton",{Size=UDim2.fromOffset(22,22),Position=UDim2.new(1,x,0,9),BackgroundColor3=col,BorderSizePixel=0,Text=sym,TextColor3=TH.bg,Font=TH.px,TextSize=12,Parent=tb}); cr(b,3)
+    b.MouseButton1Click:Connect(cb); return b
+end
+local minimized=false
+winBtn("_",TH.wn,-58,function() minimized=not minimized; Root.Size = minimized and UDim2.fromOffset(880,40) or UDim2.fromOffset(880,580) end)
+winBtn("x",TH.bd,-30,function() if V6.Unload then V6.Unload() end end)
+
+-- drag
+local drg,ds,sp
+tb.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then drg=true; ds=i.Position; sp=Root.Position; i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then drg=false end end) end end)
+C(UserInputService.InputChanged:Connect(function(i) if drg and i.UserInputType==Enum.UserInputType.MouseMovement then local d=i.Position-ds; Root.Position=UDim2.new(sp.X.Scale,sp.X.Offset+d.X,sp.Y.Scale,sp.Y.Offset+d.Y) end end))
+
+-- search bar
+local searchBar = N("Frame",{Size=UDim2.new(1,-16,0,26),Position=UDim2.new(0,8,0,46),BackgroundColor3=TH.pn,BorderSizePixel=0,Parent=Root}); cr(searchBar,3); sk(searchBar,TH.st,1); pd(searchBar,8,8,2,2)
+local searchBox = N("TextBox",{Size=UDim2.new(1,-20,1,0),BackgroundTransparency=1,Text="",PlaceholderText="search features...",PlaceholderColor3=TH.dim,TextColor3=TH.tx,Font=TH.mo,TextSize=12,TextXAlignment=Enum.TextXAlignment.Left,Parent=searchBar,ClearTextOnFocus=false})
+
+-- body
+local body = N("Frame",{Size=UDim2.new(1,-16,1,-116),Position=UDim2.new(0,8,0,76),BackgroundTransparency=1,Parent=Root})
+local tabCol = N("ScrollingFrame",{Size=UDim2.new(0,160,1,0),BackgroundColor3=TH.pn,BorderSizePixel=0,ScrollBarThickness=2,ScrollBarImageColor3=TH.ac,CanvasSize=UDim2.new(0,0,0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,Parent=body}); cr(tabCol,4); sk(tabCol,TH.st,1); pd(tabCol,6)
+N("UIListLayout",{Padding=UDim.new(0,3),SortOrder=Enum.SortOrder.LayoutOrder,Parent=tabCol})
+local contentWrap = N("Frame",{Size=UDim2.new(1,-168,1,0),Position=UDim2.new(0,168,0,0),BackgroundColor3=TH.pn,BorderSizePixel=0,Parent=body}); cr(contentWrap,4); sk(contentWrap,TH.st,1); pd(contentWrap,10)
+
+-- status + hotkeys bar
+local statusBar = N("Frame",{Size=UDim2.new(1,-16,0,28),Position=UDim2.new(0,8,1,-32),BackgroundColor3=TH.pn,BorderSizePixel=0,Parent=Root}); cr(statusBar,3); sk(statusBar,TH.st,1); pd(statusBar,10,10,6,6)
+local statusL = N("TextLabel",{Size=UDim2.new(1,-260,1,0),BackgroundTransparency=1,Text="ready",Font=TH.mo,TextSize=11,TextColor3=TH.sub,TextXAlignment=Enum.TextXAlignment.Left,Parent=statusBar})
+local statusR = N("TextLabel",{Size=UDim2.new(0,260,1,0),Position=UDim2.new(1,-260,0,0),BackgroundTransparency=1,Text="",Font=TH.mo,TextSize=11,TextColor3=TH.ac,TextXAlignment=Enum.TextXAlignment.Right,Parent=statusBar})
+
+local pages, pageBuilders, tabBtns = {}, {}, {}
+local currentTab
+local function newTab(name,icon,builder)
+    local btn = N("TextButton",{Size=UDim2.new(1,0,0,26),BackgroundColor3=TH.pn2,Text="  "..(icon or "■").."  "..name,TextColor3=TH.sub,Font=TH.px,TextSize=11,TextXAlignment=Enum.TextXAlignment.Left,AutoButtonColor=false,BorderSizePixel=0,Parent=tabCol}); cr(btn,3)
+    local ind = N("Frame",{Size=UDim2.new(0,3,1,-6),Position=UDim2.new(0,0,0,3),BackgroundColor3=TH.ac,BorderSizePixel=0,Visible=false,Parent=btn})
+    local page = N("ScrollingFrame",{Size=UDim2.new(1,0,1,0),BackgroundTransparency=1,ScrollBarThickness=3,ScrollBarImageColor3=TH.ac,CanvasSize=UDim2.new(0,0,0,0),AutomaticCanvasSize=Enum.AutomaticSize.Y,BorderSizePixel=0,Visible=false,Parent=contentWrap})
+    N("UIListLayout",{Padding=UDim.new(0,8),SortOrder=Enum.SortOrder.LayoutOrder,Parent=page,FillDirection=Enum.FillDirection.Horizontal,Wraps=true})
+    pages[name]=page; tabBtns[name]={btn=btn,ind=ind}; pageBuilders[name]=builder
+    btn.MouseButton1Click:Connect(function()
+        if pageBuilders[name] then safe(pageBuilders[name], page); pageBuilders[name]=nil end
+        for n,p in pairs(pages) do p.Visible=(n==name) end
+        for n,tb in pairs(tabBtns) do tb.btn.BackgroundColor3=TH.pn2; tb.btn.TextColor3=TH.sub; tb.ind.Visible=false end
+        btn.BackgroundColor3=TH.pn3; btn.TextColor3=TH.tx; ind.Visible=true
+        currentTab=name
+    end)
+end
+local function openTab(name) local tb=tabBtns[name]; if tb then tb.btn.MouseButton1Click:Fire() end end
+
+local function newSection(page,title,icon,wide)
+    local w = wide and UDim2.new(1,0,0,0) or UDim2.new(0.5,-5,0,0)
+    local box=N("Frame",{Size=w,BackgroundColor3=TH.pn2,BorderSizePixel=0,AutomaticSize=Enum.AutomaticSize.Y,Parent=page}); cr(box,4); sk(box,TH.st,1); pd(box,10,10,8,10)
+    local head=N("Frame",{Size=UDim2.new(1,0,0,18),BackgroundTransparency=1,Parent=box})
+    N("Frame",{Size=UDim2.fromOffset(3,12),Position=UDim2.fromOffset(0,3),BackgroundColor3=TH.ac,BorderSizePixel=0,Parent=head})
+    N("TextLabel",{Size=UDim2.new(1,-10,1,0),Position=UDim2.fromOffset(8,0),BackgroundTransparency=1,Text=(icon and (icon.." ") or "")..string.upper(title),Font=TH.px,TextSize=11,TextColor3=TH.ac,TextXAlignment=Enum.TextXAlignment.Left,Parent=head})
+    local col=N("Frame",{Size=UDim2.new(1,0,0,0),AutomaticSize=Enum.AutomaticSize.Y,Position=UDim2.new(0,0,0,22),BackgroundTransparency=1,Parent=box})
+    N("UIListLayout",{Padding=UDim.new(0,5),SortOrder=Enum.SortOrder.LayoutOrder,Parent=col})
+    return col
 end
 
-local function alive(plr)
-    local c = plr.Character if not c then return false end
-    local h = c:FindFirstChildOfClass("Humanoid")
-    return h and h.Health > 0
+------------------------------------------------------
+-- WIDGETS
+------------------------------------------------------
+local function Toggle(p,k,t,d)
+    V6.Tog[k]=d and true or false
+    local r=N("Frame",{Size=UDim2.new(1,0,0,22),BackgroundTransparency=1,Parent=p})
+    N("TextLabel",{Size=UDim2.new(1,-44,1,0),BackgroundTransparency=1,Text=t,Font=TH.px,TextSize=11,TextColor3=TH.tx,TextXAlignment=Enum.TextXAlignment.Left,Parent=r})
+    local sw=N("TextButton",{Size=UDim2.fromOffset(34,16),Position=UDim2.new(1,-34,0.5,-8),BackgroundColor3=V6.Tog[k] and TH.ac or TH.pn,BorderSizePixel=0,Text="",AutoButtonColor=false,Parent=r}); cr(sw,2); sk(sw,TH.st,1)
+    local kn=N("Frame",{Size=UDim2.fromOffset(12,12),Position=UDim2.fromOffset(V6.Tog[k] and 20 or 2,2),BackgroundColor3=V6.Tog[k] and Color3.new(1,1,1) or TH.dim,BorderSizePixel=0,Parent=sw}); cr(kn,2)
+    sw.MouseButton1Click:Connect(function()
+        V6.Tog[k]=not V6.Tog[k]
+        sw.BackgroundColor3 = V6.Tog[k] and TH.ac or TH.pn
+        kn.Position = V6.Tog[k] and UDim2.fromOffset(20,2) or UDim2.fromOffset(2,2)
+        kn.BackgroundColor3 = V6.Tog[k] and Color3.new(1,1,1) or TH.dim
+    end)
 end
 
-local function visibleTo(part, origin)
-    if not part then return false end
-    origin = origin or Camera.CFrame.Position
-    local params = RaycastParams.new()
-    params.FilterDescendantsInstances = { LocalPlayer.Character, part.Parent }
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    local r = Workspace:Raycast(origin, (part.Position - origin), params)
-    return r == nil
-end
-
-local function predict(part, t)
-    if not part then return nil end
-    local v = part.AssemblyLinearVelocity or Vector3.zero
-    return part.Position + v * t
-end
-
-local function onscreen(pos)
-    local v, on = Camera:WorldToViewportPoint(pos)
-    return on, Vector2.new(v.X, v.Y), v.Z
-end
-
-local function keyHeld(opt)
-    if not opt then return true end
-    if type(opt.GetState) == "function" then
-        local ok, r = pcall(function() return opt:GetState() end)
-        if ok then return r == true end
+local function Slider(p,k,t,d,mn,mx,st,sx)
+    V6.Opt[k]=d
+    local b=N("Frame",{Size=UDim2.new(1,0,0,34),BackgroundTransparency=1,Parent=p})
+    N("TextLabel",{Size=UDim2.new(1,-60,0,14),BackgroundTransparency=1,Text=t,Font=TH.px,TextSize=11,TextColor3=TH.tx,TextXAlignment=Enum.TextXAlignment.Left,Parent=b})
+    local vl=N("TextLabel",{Size=UDim2.new(0,60,0,14),Position=UDim2.new(1,-60,0,0),BackgroundTransparency=1,Text=tostring(d)..(sx or ""),Font=TH.mo,TextSize=11,TextColor3=TH.ac,TextXAlignment=Enum.TextXAlignment.Right,Parent=b})
+    local br=N("Frame",{Size=UDim2.new(1,0,0,6),Position=UDim2.new(0,0,0,20),BackgroundColor3=TH.pn,BorderSizePixel=0,Parent=b}); cr(br,2)
+    local fl=N("Frame",{Size=UDim2.new((d-mn)/(mx-mn),0,1,0),BackgroundColor3=TH.ac,BorderSizePixel=0,Parent=br}); cr(fl,2)
+    N("UIGradient",{Color=ColorSequence.new{ColorSequenceKeypoint.new(0,TH.ac),ColorSequenceKeypoint.new(1,TH.ac2)},Parent=fl})
+    local dr=false
+    local function set(x)
+        local rl=math.clamp((x-br.AbsolutePosition.X)/br.AbsoluteSize.X,0,1)
+        local v=mn+(mx-mn)*rl; if st then v=math.floor(v/st+0.5)*st end; v=math.clamp(v,mn,mx)
+        V6.Opt[k]=v; fl.Size=UDim2.new((v-mn)/(mx-mn),0,1,0)
+        vl.Text = (st and st>=1) and (tostring(math.floor(v))..(sx or "")) or (string.format("%.2f",v)..(sx or ""))
     end
-    return true
+    br.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dr=true; set(i.Position.X) end end)
+    C(UserInputService.InputChanged:Connect(function(i) if dr and i.UserInputType==Enum.UserInputType.MouseMovement then set(i.Position.X) end end))
+    C(UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dr=false end end))
 end
 
-local function notify(text, duration)
-    if not S.misc.notif then return end
-    pcall(function() Library:Notify(text, duration or 3) end)
+local function Dropdown(p,k,t,vs,d)
+    V6.Opt[k]=d
+    local b=N("Frame",{Size=UDim2.new(1,0,0,36),BackgroundTransparency=1,Parent=p})
+    N("TextLabel",{Size=UDim2.new(1,0,0,14),BackgroundTransparency=1,Text=t,Font=TH.px,TextSize=11,TextColor3=TH.tx,TextXAlignment=Enum.TextXAlignment.Left,Parent=b})
+    local bt=N("TextButton",{Size=UDim2.new(1,0,0,18),Position=UDim2.new(0,0,0,16),BackgroundColor3=TH.pn,BorderSizePixel=0,Text="  "..d.."  v",Font=TH.mo,TextSize=11,TextColor3=TH.tx,TextXAlignment=Enum.TextXAlignment.Left,AutoButtonColor=false,Parent=b}); cr(bt,2); sk(bt,TH.st,1)
+    local ls=N("Frame",{Size=UDim2.new(1,0,0,0),Position=UDim2.new(0,0,1,2),BackgroundColor3=TH.pn2,BorderSizePixel=0,Visible=false,ZIndex=60,Parent=bt,AutomaticSize=Enum.AutomaticSize.Y}); cr(ls,2); sk(ls,TH.ac,1)
+    N("UIListLayout",{SortOrder=Enum.SortOrder.LayoutOrder,Parent=ls})
+    for _,v in ipairs(vs) do
+        local it=N("TextButton",{Size=UDim2.new(1,0,0,18),BackgroundColor3=TH.pn2,BorderSizePixel=0,Text="  "..v,Font=TH.mo,TextSize=11,TextColor3=TH.tx,TextXAlignment=Enum.TextXAlignment.Left,AutoButtonColor=false,ZIndex=61,Parent=ls})
+        it.MouseEnter:Connect(function() it.BackgroundColor3=TH.ac; it.TextColor3=Color3.new(1,1,1) end)
+        it.MouseLeave:Connect(function() it.BackgroundColor3=TH.pn2; it.TextColor3=TH.tx end)
+        it.MouseButton1Click:Connect(function() V6.Opt[k]=v; bt.Text="  "..v.."  v"; ls.Visible=false end)
+    end
+    bt.MouseButton1Click:Connect(function() ls.Visible=not ls.Visible end)
 end
 
-local function playSound(id, vol, pitch)
-    local s = Instance.new("Sound")
-    s.SoundId = typeof(id)=="number" and ("rbxassetid://"..id) or id
-    s.Volume = vol or 1
-    s.PlaybackSpeed = pitch or 1
-    s.Parent = SoundService
-    s:Play()
-    Debris:AddItem(s, 3)
+local function Keybind(p,k,t,dk,dm)
+    V6.Keys[k]={k=dk,mode=dm or "Hold",state=false,toggleOn=false}
+    local b=N("Frame",{Size=UDim2.new(1,0,0,22),BackgroundTransparency=1,Parent=p})
+    N("TextLabel",{Size=UDim2.new(1,-130,1,0),BackgroundTransparency=1,Text=t,Font=TH.px,TextSize=11,TextColor3=TH.tx,TextXAlignment=Enum.TextXAlignment.Left,Parent=b})
+    local function nm(x) return (typeof(x)=="EnumItem") and x.Name or tostring(x) end
+    local kb=N("TextButton",{Size=UDim2.fromOffset(64,18),Position=UDim2.new(1,-130,0.5,-9),BackgroundColor3=TH.pn,Text=nm(dk),Font=TH.mo,TextSize=10,TextColor3=TH.ac,BorderSizePixel=0,AutoButtonColor=false,Parent=b}); cr(kb,2); sk(kb,TH.st,1)
+    local mb=N("TextButton",{Size=UDim2.fromOffset(60,18),Position=UDim2.new(1,-62,0.5,-9),BackgroundColor3=TH.pn,Text=V6.Keys[k].mode,Font=TH.px,TextSize=10,TextColor3=TH.sub,BorderSizePixel=0,AutoButtonColor=false,Parent=b}); cr(mb,2); sk(mb,TH.st,1)
+    local picking=false
+    kb.MouseButton1Click:Connect(function() picking=true; kb.Text="..." end)
+    C(UserInputService.InputBegan:Connect(function(i,gpe)
+        if picking then
+            if i.UserInputType==Enum.UserInputType.Keyboard then V6.Keys[k].k=i.KeyCode
+            elseif i.UserInputType==Enum.UserInputType.MouseButton1 then V6.Keys[k].k="MB1"
+            elseif i.UserInputType==Enum.UserInputType.MouseButton2 then V6.Keys[k].k="MB2" end
+            kb.Text=nm(V6.Keys[k].k); picking=false; return
+        end
+        if gpe then return end
+        local kk=V6.Keys[k]
+        local m=(kk.k=="MB1" and i.UserInputType==Enum.UserInputType.MouseButton1) or (kk.k=="MB2" and i.UserInputType==Enum.UserInputType.MouseButton2) or (typeof(kk.k)=="EnumItem" and i.KeyCode==kk.k)
+        if m then if kk.mode=="Hold" then kk.state=true elseif kk.mode=="Toggle" then kk.toggleOn=not kk.toggleOn; kk.state=kk.toggleOn end end
+    end))
+    C(UserInputService.InputEnded:Connect(function(i)
+        local kk=V6.Keys[k]; local m=(kk.k=="MB1" and i.UserInputType==Enum.UserInputType.MouseButton1) or (kk.k=="MB2" and i.UserInputType==Enum.UserInputType.MouseButton2) or (typeof(kk.k)=="EnumItem" and i.KeyCode==kk.k)
+        if m and kk.mode=="Hold" then kk.state=false end
+    end))
+    mb.MouseButton1Click:Connect(function() local o={Hold="Toggle",Toggle="Always",Always="Hold"}; V6.Keys[k].mode=o[V6.Keys[k].mode]; mb.Text=V6.Keys[k].mode; V6.Keys[k].state=(V6.Keys[k].mode=="Always") end)
 end
 
-local function rainbow(speed, offset)
-    return Color3.fromHSV(((tick() * (speed or 1)) + (offset or 0)) % 1, 1, 1)
+local function ColorBox(p,k,t,d)
+    V6.Opt[k]=d
+    local b=N("Frame",{Size=UDim2.new(1,0,0,22),BackgroundTransparency=1,Parent=p})
+    N("TextLabel",{Size=UDim2.new(1,-30,1,0),BackgroundTransparency=1,Text=t,Font=TH.px,TextSize=11,TextColor3=TH.tx,TextXAlignment=Enum.TextXAlignment.Left,Parent=b})
+    local sw=N("Frame",{Size=UDim2.fromOffset(24,14),Position=UDim2.new(1,-24,0.5,-7),BackgroundColor3=d,BorderSizePixel=0,Parent=b}); cr(sw,2); sk(sw,TH.st,1)
+    local presets={d,Color3.fromRGB(255,80,180),Color3.fromRGB(80,230,160),Color3.fromRGB(255,220,80),Color3.fromRGB(255,255,255),Color3.fromRGB(0,200,255),Color3.fromRGB(255,80,110),Color3.fromRGB(255,120,0),Color3.fromRGB(140,90,255)}
+    local idx=1
+    N("TextButton",{Size=UDim2.new(1,0,1,0),BackgroundTransparency=1,Text="",Parent=sw}).MouseButton1Click:Connect(function() idx=idx%#presets+1; V6.Opt[k]=presets[idx]; sw.BackgroundColor3=presets[idx] end)
 end
 
-local hitSounds = {
-    hitmarker=3779005184, rust=5554541971, skeet=1500880381,
-    bell=12222257, minecraft=1839997054, bone=2851554006,
-    ding=230295843, glass=143082895, pop=448572983, tick=1659517145,
-}
-local killSounds = {
-    rust=5554541971, anime=4612375233, taco=142403532, gta=177418988,
-    quake=2616682174, bruh=4953846338, windows=136351184,
-}
-local skyboxes = {
-    DeepSpace  = {Up="48348670",Dn="48348710",Lf="48348542",Rt="48348587",Bk="48348446",Ft="48348499"},
-    NebulaBlue = {Up="159454299",Dn="159454296",Lf="159454293",Rt="159454286",Bk="159454284",Ft="159454288"},
-    Sunset     = {Up="271042467",Dn="271077243",Lf="271042330",Rt="271077958",Bk="271084259",Ft="271083692"},
-    Night      = {Up="12064107",Dn="12064152",Lf="12064121",Rt="12063984",Bk="12064115",Ft="12063993"},
-    Purple     = {Up="159454288",Dn="159454293",Lf="159454299",Rt="159454284",Bk="159454296",Ft="159454286"},
-    Realistic  = {Up="159454278",Dn="159454282",Lf="159454275",Rt="159454272",Bk="159454269",Ft="159454267"},
-}
+local function Button(p,t,cb)
+    local b=N("TextButton",{Size=UDim2.new(1,0,0,22),BackgroundColor3=TH.ac,BorderSizePixel=0,Text=t,Font=TH.px,TextSize=11,TextColor3=Color3.new(1,1,1),AutoButtonColor=true,Parent=p}); cr(b,3)
+    b.MouseButton1Click:Connect(cb)
+end
 
--- ============================================================================
--- AIMBOT
--- ============================================================================
-local aimCircle = Drawing.new("Circle")
-aimCircle.Thickness=1 aimCircle.NumSides=64 aimCircle.Filled=false aimCircle.Visible=false
-bin(aimCircle)
+local function Label(p,t,c) return N("TextLabel",{Size=UDim2.new(1,0,0,14),BackgroundTransparency=1,Text=t,Font=TH.px,TextSize=10,TextColor3=c or TH.sub,TextXAlignment=Enum.TextXAlignment.Left,Parent=p}) end
 
-local snapLine = Drawing.new("Line")
-snapLine.Thickness=1 snapLine.Visible=false
-bin(snapLine)
+local function TextInput(p,k,t,d,ph)
+    V6.Opt[k]=d
+    local b=N("Frame",{Size=UDim2.new(1,0,0,36),BackgroundTransparency=1,Parent=p})
+    N("TextLabel",{Size=UDim2.new(1,0,0,14),BackgroundTransparency=1,Text=t,Font=TH.px,TextSize=11,TextColor3=TH.tx,TextXAlignment=Enum.TextXAlignment.Left,Parent=b})
+    local bx=N("TextBox",{Size=UDim2.new(1,0,0,18),Position=UDim2.new(0,0,0,16),BackgroundColor3=TH.pn,BorderSizePixel=0,Text=d,PlaceholderText=ph or "",Font=TH.mo,TextSize=11,TextColor3=TH.tx,TextXAlignment=Enum.TextXAlignment.Left,Parent=b}); cr(bx,2); sk(bx,TH.st,1); pd(bx,6)
+    bx:GetPropertyChangedSignal("Text"):Connect(function() V6.Opt[k]=bx.Text end)
+end
 
-local function bestTarget()
-    local center = Camera.ViewportSize / 2
-    local best, bestDist = nil, S.aimbot.fov
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and alive(plr) and (not S.aimbot.team_check or not isTeammate(plr)) then
-            local part = plr.Character:FindFirstChild(S.aimbot.hit_part or "Head")
-            if part then
-                local d3 = (part.Position - Camera.CFrame.Position).Magnitude
-                if d3 <= S.aimbot.max_dist then
-                    if (not S.aimbot.visible_only) or visibleTo(part) then
-                        local on, scr = onscreen(part.Position)
-                        if on then
-                            local d = (scr - center).Magnitude
-                            if d < bestDist then bestDist = d best = plr end
+------------------------------------------------------
+-- TABS (lazy builders — content built only on first open)
+------------------------------------------------------
+newTab("AC SAFE","!",function(p)
+    local s=newSection(p,"Anti-Cheat Safe Mode","!",true)
+    Label(s,"Rivals AC v2 catches CFrame writes and meta hooks.",TH.wn)
+    Label(s,"Keep these ON when testing a new game.",TH.wn)
+    local l=newSection(p,"Guards","!")
+    Toggle(l,"AcSafe","AC Safe Mode (master)",true)
+    Toggle(l,"AcNoCFrame","Skip HRP CFrame Writes",true)
+    Toggle(l,"AcNoAutoRot","Skip AutoRotate Disable",true)
+    Toggle(l,"AcNoHook","Skip Metatable Hook",false)
+    Toggle(l,"AcNoBodyMover","Skip BodyVelocity/BodyGyro",false)
+    Toggle(l,"AcSoftTick","Throttle Ticks",true)
+    Toggle(l,"AcPcallAll","pcall Every Write",true)
+    Toggle(l,"AcSkipDeadTicks","Skip Ticks When Dead",true)
+    local r=newSection(p,"Diagnostics","?")
+    Label(r,"Executor: "..(identifyexecutor and identifyexecutor() or "?"))
+    Label(r,"hookmetamethod: "..(hookmetamethod and "yes" or "no"))
+    Label(r,"getrawmetatable: "..(getrawmetatable and "yes" or "no"))
+    Label(r,"mousemoverel: "..(mousemoverel and "yes" or "no"))
+    Label(r,"Drawing: "..(Drawing and "yes" or "no"))
+    Label(r,"writefile: "..(writefile and "yes" or "no"))
+end)
+
+newTab("RAGEBOT",">",function(p)
+    local s=newSection(p,"Core",">")
+    Toggle(s,"RageEnabled","Enable Ragebot",false)
+    Toggle(s,"RageSilent","Silent Aim",true)
+    Toggle(s,"RageAutoFire","Auto Fire",false)
+    Toggle(s,"RageAutoStop","Auto Stop",false)
+    Toggle(s,"RageAutoScope","Auto Scope",true)
+    Toggle(s,"RageAutoCrouch","Auto Crouch on Shot",false)
+    Toggle(s,"RageAutoReload","Auto Reload",false)
+    Slider(s,"RageFov","FOV",80,5,500,1,"px")
+    Slider(s,"RageMaxDist","Max Distance",500,10,5000,10,"s")
+    Slider(s,"RageMinDmg","Min Damage",1,1,150,1)
+    Slider(s,"RageShotDelay","Shot Delay",0.05,0,1,0.01,"s")
+    Dropdown(s,"RageKeyMode","Activation",{"Always","Hold","Toggle"},"Hold")
+    Keybind(s,"RageKey","Rage Key","MB2","Hold")
+
+    local s2=newSection(p,"Target","@")
+    Dropdown(s2,"RagePrio","Priority",{"FOV","Distance","Health","LowestHP","Crosshair","HighestDmg","Random"},"FOV")
+    Toggle(s2,"RageVisibleOnly","Visible Only",false)
+    Toggle(s2,"RageIgnoreTeam","Ignore Team",true)
+    Toggle(s2,"RageIgnoreFriends","Ignore Friends",true)
+    Toggle(s2,"RageIgnoreCrouch","Ignore Crouching",false)
+    Toggle(s2,"RageIgnoreLow","Ignore HP<10",false)
+    Toggle(s2,"RageLockTarget","Lock Target Until Dead",false)
+    Slider(s2,"RageSwitch","Switch Delay",0.05,0,1,0.01,"s")
+    Slider(s2,"RageKillDelay","Kill Delay",0,0,1,0.01,"s")
+
+    local s3=newSection(p,"Hitboxes","#")
+    Dropdown(s3,"RageHitbox","Primary Hitbox",{"Head","UpperTorso","Torso","HumanoidRootPart","LeftUpperArm","RightUpperArm","LeftUpperLeg","RightUpperLeg","Nearest","MultiScan"},"Head")
+    Slider(s3,"RageHbHead","Weight: Head",10,0,10,1)
+    Slider(s3,"RageHbChest","Weight: Chest",6,0,10,1)
+    Slider(s3,"RageHbPelvis","Weight: Pelvis",4,0,10,1)
+    Slider(s3,"RageHbArms","Weight: Arms",2,0,10,1)
+    Slider(s3,"RageHbLegs","Weight: Legs",2,0,10,1)
+    Slider(s3,"RageMultipoint","Multipoint Scale",0.75,0,1,0.05)
+    Slider(s3,"RageMultiPts","Multipoint Count",6,1,16,1)
+    Toggle(s3,"RageHeadScale","Head Scale Enable",false)
+    Slider(s3,"RageHeadScaleV","Head Scale",2,1,10,0.1)
+
+    local s4=newSection(p,"Prediction / BT","~")
+    Toggle(s4,"RagePred","Velocity Prediction",true)
+    Slider(s4,"RagePredFactor","Prediction Factor",0.16,0,1,0.01,"s")
+    Toggle(s4,"RageAirPred","Air Prediction",true)
+    Toggle(s4,"RageCurvePred","Parabolic Curve",false)
+    Toggle(s4,"RageHcGate","Hitchance Gate",true)
+    Slider(s4,"RageHc","Min Hitchance",70,0,100,1,"%")
+    Slider(s4,"RageHcSamples","Hitchance Samples",12,4,32,1)
+    Toggle(s4,"RageBT","Backtrack",true)
+    Slider(s4,"RageBTms","Backtrack Max",200,0,1000,10,"ms")
+    Toggle(s4,"RageMagicBullet","Magic Bullet Retry",false)
+    Slider(s4,"RageMagicTries","Retry Count",3,1,10,1)
+end)
+
+newTab("RAGE+ PEAK",">>",function(p)
+    local s=newSection(p,"Safepoint / Damage","+")
+    Toggle(s,"RageSafepoint","Force Safepoint",true)
+    Slider(s,"RageSPBias","Safepoint Bias",0.6,0,1,0.05)
+    Toggle(s,"RageForceHS","Force Headshot",false)
+    Toggle(s,"RageForceBaim","Force Body Aim",false)
+    Toggle(s,"RageAdaptiveBaim","Adaptive Baim After Misses",true)
+    Slider(s,"RageBaimMiss","Baim After Misses",2,1,6,1)
+    Toggle(s,"RageDamageAvg","Damage Averaging",true)
+    Slider(s,"RageDmgCeil","Damage Ceiling",100,1,200,1)
+
+    local s2=newSection(p,"Delta / Teleport / Blink","*")
+    Toggle(s2,"RageDeltaShot","Delta Shot",false)
+    Slider(s2,"RageDeltaMs","Delta Window",60,1,400,1,"ms")
+    Toggle(s2,"RageTPAim","Teleport Aim",false)
+    Slider(s2,"RageTPDist","TP Distance",10,2,40,1,"s")
+    Toggle(s2,"RageBlink","Blink (choke stack)",false)
+    Slider(s2,"RageBlinkTicks","Blink Ticks",12,2,28,1)
+    Keybind(s2,"RageBlinkKey","Blink Key",Enum.KeyCode.T,"Hold")
+    Toggle(s2,"RageFakeDuck","Fake Duck",false)
+    Keybind(s2,"RageDuckKey","Duck Key",Enum.KeyCode.H,"Toggle")
+    Toggle(s2,"RageSlow","Slow Walk",false)
+    Slider(s2,"RageSlowSpd","Slow Speed",4,1,16,1)
+
+    local s3=newSection(p,"Rate / Behavior","%")
+    Slider(s3,"RageSPS","Max Shots/sec",10,1,60,1)
+    Slider(s3,"RageConf","Min Confidence",65,0,100,1,"%")
+    Toggle(s3,"RageNoScope","Allow No-Scope",false)
+    Toggle(s3,"RageFastFire","Fast Fire",false)
+    Toggle(s3,"RageAimCone","Compensate Cone",true)
+    Slider(s3,"RageConeSamp","Cone Samples",8,1,32,1)
+    Toggle(s3,"RageAutoKnife","Auto Knife Close",false)
+    Slider(s3,"RageKnifeDist","Knife Distance",10,2,25,1)
+    Toggle(s3,"RageAutoPreTrig","Auto Pre-Trigger",false)
+    Toggle(s3,"RageHidePeek","Hide Shots on Peek",false)
+
+    local s4=newSection(p,"Humanize / Flick","!")
+    Toggle(s4,"RageHumanize","Humanize Aim",false)
+    Dropdown(s4,"RageCurve","Curve",{"Linear","EaseIn","EaseOut","EaseInOut","Bezier","Flick","Snap"},"EaseOut")
+    Slider(s4,"RageSmooth","Smoothing",3,1,20,0.5)
+    Toggle(s4,"RageFlick","Flick Mode",false)
+    Slider(s4,"RageFlickDeg","Flick Angle",15,1,180,1,"°")
+    Slider(s4,"RageFlickMs","Flick Duration",80,10,500,10,"ms")
+end)
+
+newTab("ANTI-AIM","<",function(p)
+    local s=newSection(p,"Yaw","<")
+    Toggle(s,"AAEnabled","Enable Anti-Aim",false)
+    Dropdown(s,"AAYawMode","Yaw Mode",{"Backwards","Jitter","Spin","Zero","Sideways","Random","LBY-Break"},"Jitter")
+    Slider(s,"AADesync","Desync Angle",58,-180,180,1,"°")
+    Keybind(s,"AAInvert","Invert Key",Enum.KeyCode.X,"Toggle")
+    local s2=newSection(p,"Pitch","v")
+    Toggle(s2,"AAPitchOn","Enable Pitch",false)
+    Dropdown(s2,"AAPitch","Pitch",{"Down","Up","Zero","Jitter"},"Down")
+    local s3=newSection(p,"Fakelag","~")
+    Toggle(s3,"FakeLag","Fakelag",false)
+    Slider(s3,"FakeLagT","Choke Ticks",7,1,14,1)
+    Dropdown(s3,"FakeLagMode","Mode",{"Static","Adaptive","Jitter","OnPeek","OnMove"},"Adaptive")
+end)
+
+newTab("AA+ PEAK","<<",function(p)
+    local s=newSection(p,"Yaw Base","<<")
+    Toggle(s,"AAXOn","Enable AA+",false)
+    Dropdown(s,"AAXBase","Yaw Base",{"Target","Local","At-Targets","Freestanding","Static"},"At-Targets")
+    Slider(s,"AAXYawAdd","Yaw Add",0,-180,180,1,"°")
+    Dropdown(s,"AAXMod","Yaw Modifier",{"None","Center","Offset","Spin","Random","Jitter","Sway","3-way"},"Jitter")
+    Slider(s,"AAXModDeg","Modifier Deg",15,0,180,1,"°")
+    Slider(s,"AAXModHz","Modifier Hz",8,0.1,30,0.1)
+
+    local s2=newSection(p,"Desync","#")
+    Toggle(s2,"AAXDesyncReal","Desync Real",true)
+    Slider(s2,"AAXDesyncL","Desync Left",58,0,60,1,"°")
+    Slider(s2,"AAXDesyncR","Desync Right",58,0,60,1,"°")
+    Toggle(s2,"AAXLBY","LBY Breaker",true)
+    Toggle(s2,"AAXMicro","Micro Jitter",true)
+    Slider(s2,"AAXMicroDeg","Micro Deg",3,0,20,1,"°")
+    Toggle(s2,"AAXBodyYaw","Body Yaw",true)
+    Slider(s2,"AAXBodyDeg","Body Yaw Deg",90,0,180,1,"°")
+    Toggle(s2,"AAXEdge","Edge Yaw",false)
+
+    local s3=newSection(p,"Per-State AA","s")
+    Label(s3,"Different yaw per movement state")
+    Dropdown(s3,"AAXStand","Standing",{"Inherit","Backwards","Jitter","Spin","Sideways"},"Inherit")
+    Dropdown(s3,"AAXMove","Moving",{"Inherit","Backwards","Jitter","Spin","Sideways"},"Inherit")
+    Dropdown(s3,"AAXAir","In Air",{"Inherit","Backwards","Jitter","Spin","Sideways","Zero"},"Zero")
+    Dropdown(s3,"AAXCrouch","Crouching",{"Inherit","Backwards","Jitter","Spin","Sideways"},"Inherit")
+    Dropdown(s3,"AAXSlowWalk","Slow Walk",{"Inherit","Backwards","Jitter","Spin","Sideways"},"Jitter")
+
+    local s4=newSection(p,"Pitch / Roll / Sway","~")
+    Dropdown(s4,"AAXPitch","Pitch",{"None","Down","Up","Zero","Fake","Jitter","Random"},"Down")
+    Slider(s4,"AAXPitchDeg","Pitch Deg",89,0,89,1,"°")
+    Dropdown(s4,"AAXRoll","Roll",{"None","Left","Right","Alternate","Sway"},"None")
+    Slider(s4,"AAXRollDeg","Roll Deg",30,0,180,1,"°")
+    Toggle(s4,"AAXSway","Sine Sway",false)
+    Slider(s4,"AAXSwayHz","Sway Hz",1.5,0.1,20,0.1)
+    Slider(s4,"AAXSwayDeg","Sway Deg",8,0,60,1,"°")
+
+    local s5=newSection(p,"Manual / On-Shot / Defensive","!")
+    Toggle(s5,"AAXManual","Enable Manual",false)
+    Keybind(s5,"AAXML","Manual Left",Enum.KeyCode.Left,"Hold")
+    Keybind(s5,"AAXMR","Manual Right",Enum.KeyCode.Right,"Hold")
+    Keybind(s5,"AAXMB","Manual Back",Enum.KeyCode.Down,"Hold")
+    Keybind(s5,"AAXMF","Manual Forward",Enum.KeyCode.Up,"Hold")
+    Keybind(s5,"AAXFlip","Inverter",Enum.KeyCode.X,"Toggle")
+    Toggle(s5,"AAXOnShot","On-Shot AA",true)
+    Slider(s5,"AAXOSDeg","On-Shot Flip",180,0,360,1,"°")
+    Slider(s5,"AAXOSms","On-Shot Hold",220,50,1000,10,"ms")
+    Toggle(s5,"AAXDef","Defensive AA",true)
+    Slider(s5,"AAXDefMs","Defensive Hold",320,50,1500,10,"ms")
+
+    local s6=newSection(p,"Freestanding / HUD","o")
+    Toggle(s6,"AAXFree","Freestanding",true)
+    Slider(s6,"AAXFreeDist","Freestand Scan",20,2,60,1,"s")
+    Toggle(s6,"AAXAtTgt","At-Targets",true)
+    Toggle(s6,"AAXAtBest","Use Best vs Closest",true)
+    Toggle(s6,"AAXArrow","Desync Arrow HUD",true)
+    Toggle(s6,"AAXTriangle","Full Triangle Indicator",true)
+end)
+
+newTab("FAKE POS","~",function(p)
+    local s=newSection(p,"Engine","~")
+    Toggle(s,"FPOn","Enable Fake Position",false)
+    Dropdown(s,"FPEngine","Engine",{"Static","Orbit","OrbitDual","Random","Behind","MouseDrag","Teleport","Zigzag","PathReplay","Mirror","PingTP","Split","Choke-Freeze","Warp","Figure8"},"OrbitDual")
+    Slider(s,"FPRadius","Radius",10,1,80,1,"s")
+    Slider(s,"FPHeight","Height",0,-20,20,0.5,"s")
+    Slider(s,"FPSpeed","Speed",3,0,30,0.1)
+    Toggle(s,"FPDual","Dual Ghost",true)
+    Toggle(s,"FPColor","Color Shift",true)
+    Slider(s,"FPAlpha","Ghost Alpha",0.4,0,1,0.05)
+    ColorBox(s,"FPCol","Ghost Color",Color3.fromRGB(180,100,255))
+    Keybind(s,"FPKey","Toggle Key",Enum.KeyCode.V,"Toggle")
+    local s2=newSection(p,"Extras","*")
+    Slider(s2,"FPReplayMs","Replay Lag",350,50,1500,10,"ms")
+    Toggle(s2,"FPBlink","Blink Teleport",false)
+    Keybind(s2,"FPBlinkKey","Blink Key",Enum.KeyCode.G,"Hold")
+    Slider(s2,"FPBlinkDist","Blink Distance",8,2,40,1,"s")
+    Toggle(s2,"FPWarpShot","Warp On Shot",false)
+    Toggle(s2,"FPFreezePeek","Freeze on Peek",false)
+    Toggle(s2,"FPGhostTrail","Ghost Trail",false)
+end)
+
+newTab("AUTOWALL","#",function(p)
+    local s=newSection(p,"Autowall","#")
+    Toggle(s,"AwOn","Enable",true)
+    Slider(s,"AwMin","Min Wall Dmg",20,1,150,1)
+    Slider(s,"AwPen","Max Penetrations",2,1,5,1)
+    Slider(s,"AwLoss","Damage Per Wall",25,5,80,1)
+    local s2=newSection(p,"Resolver","?")
+    Toggle(s2,"ResOn","Enable",true)
+    Dropdown(s2,"ResMode","Mode",{"Brute","Memory","Jitter","Static","LBY","Adaptive","LBY-Freestand","Velocity"},"Adaptive")
+    Slider(s2,"ResMax","Max Misses",2,1,10,1)
+    Slider(s2,"ResStep","Brute Step",58,1,180,1,"°")
+    Toggle(s2,"ResForceBody","Force Body on Miss",true)
+    Toggle(s2,"ResSafe","Prefer Safepoint",true)
+end)
+
+newTab("LEGIT","o",function(p)
+    local s=newSection(p,"Legit Aim","o")
+    Toggle(s,"LegitOn","Enable",false)
+    Slider(s,"LegitFov","FOV",25,1,200,1,"px")
+    Slider(s,"LegitSmooth","Smoothing",8,1,30,0.5)
+    Dropdown(s,"LegitHB","Hitbox",{"Head","Torso","Nearest"},"Head")
+    Toggle(s,"LegitVis","Visible Only",true)
+    Toggle(s,"LegitPredict","Predict",false)
+    Slider(s,"LegitPredMs","Predict ms",80,0,500,10,"ms")
+    Keybind(s,"LegitKey","Legit Key","MB2","Hold")
+    local s2=newSection(p,"Trigger Bot","!")
+    Toggle(s2,"TrigOn","Enable",false)
+    Slider(s2,"TrigDelay","Delay",0.03,0,0.5,0.01,"s")
+    Slider(s2,"TrigBurst","Burst Count",1,1,10,1)
+    Slider(s2,"TrigReset","Reset Cooldown",0.15,0,1,0.01,"s")
+    Toggle(s2,"TrigHeadOnly","Head Only",false)
+    Keybind(s2,"TrigKey","Trigger Key",Enum.KeyCode.C,"Hold")
+end)
+
+newTab("ESP+","*",function(p)
+    local s=newSection(p,"Core","*")
+    Toggle(s,"EspOn","Enable ESP",false)
+    Toggle(s,"EspBox","Box",true)
+    Dropdown(s,"EspBoxStyle","Box Style",{"Full","Corner","Rounded","3D"},"Corner")
+    Toggle(s,"EspFilled","Filled Box",false)
+    Slider(s,"EspBoxOpa","Fill Opacity",0.2,0,1,0.05)
+    Toggle(s,"EspName","Name",true)
+    Toggle(s,"EspHealth","Health Bar",true)
+    Toggle(s,"EspHealthText","Health Text",false)
+    Toggle(s,"EspDist","Distance",true)
+    Toggle(s,"EspWeapon","Weapon",false)
+    Toggle(s,"EspTeamTag","Team Tag",false)
+
+    local s2=newSection(p,"Lines / Dots","-")
+    Toggle(s2,"EspSkeleton","Skeleton",false)
+    Toggle(s2,"EspHeadDot","Head Dot",false)
+    Toggle(s2,"EspHeadCircle","Head Circle",false)
+    Toggle(s2,"EspTracer","Tracer",false)
+    Dropdown(s2,"EspTracerO","Tracer Origin",{"Bottom","Mouse","Top","Center"},"Bottom")
+    Toggle(s2,"EspSnapline","Snapline (to target)",false)
+    Toggle(s2,"EspOffscreen","Off-Screen Arrow",true)
+    Slider(s2,"EspArrowRad","Arrow Radius",180,50,400,5)
+    Slider(s2,"EspFontSize","Font Size",14,8,24,1)
+    Toggle(s2,"EspTeamShow","Show Team",false)
+    Toggle(s2,"EspTeamColor","Use Team Color",false)
+    Toggle(s2,"EspRainbow","Rainbow Color",false)
+    ColorBox(s2,"EspColor","Enemy Color",Color3.fromRGB(255,60,120))
+    ColorBox(s2,"EspFriendColor","Friend Color",Color3.fromRGB(80,180,255))
+
+    local s3=newSection(p,"Chams","#")
+    Toggle(s3,"ChamsOn","Enable Chams",false)
+    Dropdown(s3,"ChamsMat","Material",{"ForceField","Neon","Plastic","Glass","SmoothPlastic","Metal"},"ForceField")
+    ColorBox(s3,"ChamsColor","Fill",Color3.fromRGB(255,0,120))
+    Slider(s3,"ChamsFill","Fill Transparency",0.4,0,1,0.05)
+    Toggle(s3,"ChamsVisCheck","Visible-Check Color",true)
+    ColorBox(s3,"ChamsVisColor","Visible Color",Color3.fromRGB(80,230,160))
+    ColorBox(s3,"ChamsOutline","Outline",Color3.fromRGB(255,255,255))
+end)
+
+newTab("VISUALS","+",function(p)
+    local s=newSection(p,"HUD","+")
+    Toggle(s,"VisFov","FOV Circle",true)
+    ColorBox(s,"VisFovColor","FOV Color",Color3.fromRGB(180,100,255))
+    Toggle(s,"VisFovFilled","Fill FOV",false)
+    Toggle(s,"VisLegitFov","Legit FOV Circle",true)
+    Toggle(s,"VisTargetBox","Target Highlight",true)
+    Toggle(s,"VisHcBar","Hitchance Bar",true)
+    Toggle(s,"VisStats","Stats Panel",true)
+    Toggle(s,"VisWater","Watermark",true)
+    Toggle(s,"VisKeybinds","Keybinds List",true)
+
+    local s2=newSection(p,"Crosshair","+")
+    Toggle(s2,"XhOn","Enable Crosshair",false)
+    Dropdown(s2,"XhStyle","Style",{"Plus","Dot","T","Circle","Cross+Dot","X","Lines"},"Plus")
+    Slider(s2,"XhSize","Size",10,2,40,1)
+    Slider(s2,"XhGap","Gap",3,0,20,1)
+    Slider(s2,"XhThick","Thickness",1,1,5,1)
+    ColorBox(s2,"XhColor","Color",Color3.fromRGB(180,100,255))
+    Toggle(s2,"XhOutline","Outline",true)
+end)
+
+newTab("WORLD","W",function(p)
+    local s=newSection(p,"World","W")
+    Toggle(s,"NoFog","No Fog",false)
+    Toggle(s,"FullBright","Fullbright",false)
+    Slider(s,"Bright","Brightness",2,0,10,0.1)
+    Toggle(s,"TimeLock","Time Lock (Noon)",false)
+    Toggle(s,"RemoveParticles","Remove Particles",false)
+    local s2=newSection(p,"Camera","C")
+    Toggle(s2,"CamFovOn","Apply Camera FOV",false)
+    Slider(s2,"CamFov","Camera FOV",70,1,120,1)
+    Toggle(s2,"ThirdP","Third Person",false)
+    Slider(s2,"TPDist","3rd Person Distance",12,2,40,1)
+end)
+
+newTab("MOVEMENT","^",function(p)
+    local s=newSection(p,"Movement","^")
+    Toggle(s,"Bhop","Bunnyhop",false)
+    Toggle(s,"InfJump","Infinite Jump",false)
+    Toggle(s,"WsOn","Apply Walkspeed",false)
+    Slider(s,"Ws","Walkspeed",16,16,500,1)
+    Toggle(s,"JpOn","Apply JumpPower",false)
+    Slider(s,"Jp","JumpPower",50,50,1000,1)
+    Toggle(s,"Noclip","Noclip",false)
+    Toggle(s,"HipFire","Lock Rotation Off",false)
+    local s2=newSection(p,"Fly","^^")
+    Toggle(s2,"Fly","Fly",false)
+    Slider(s2,"FlySpd","Fly Speed",50,5,300,1)
+    Keybind(s2,"FlyKey","Fly Key",Enum.KeyCode.F,"Toggle")
+end)
+
+newTab("MISC","=",function(p)
+    local s=newSection(p,"Automation","=")
+    Toggle(s,"AntiAfk","Anti AFK",true)
+    Toggle(s,"HitSound","Hit Sound",true)
+    Slider(s,"HitVol","Hit Sound Volume",0.6,0,2,0.05)
+    TextInput(s,"HitSoundId","Hit Sound ID","3744371091","asset id")
+    Toggle(s,"KillSound","Kill Sound",false)
+    TextInput(s,"KillSoundId","Kill Sound ID","131886985","asset id")
+    local s2=newSection(p,"Menu","M")
+    Keybind(s2,"MenuKey","Toggle Menu",Enum.KeyCode.RightShift,"Hold")
+    Slider(s2,"MenuAlpha","Menu Opacity",1,0.2,1,0.05)
+end)
+
+newTab("CONFIG","$",function(p)
+    local s=newSection(p,"Config","$")
+    TextInput(s,"CfgName","Config Name","default","")
+    Button(s,"SAVE",function()
+        local d={Opt={},Tog={}}
+        for k,v in pairs(V6.Opt) do if typeof(v)~="Color3" and type(v)~="function" then d.Opt[k]=v end end
+        for k,v in pairs(V6.Tog) do d.Tog[k]=v end
+        if writefile then pcall(writefile,"UEV6_"..(O.CfgName or "default")..".json",HttpService:JSONEncode(d)) end
+    end)
+    Button(s,"LOAD",function()
+        local f="UEV6_"..(O.CfgName or "default")..".json"
+        if isfile and isfile(f) then local d=HttpService:JSONDecode(readfile(f)); for k,v in pairs(d.Opt or {}) do V6.Opt[k]=v end; for k,v in pairs(d.Tog or {}) do V6.Tog[k]=v end end
+    end)
+    Button(s,"UNLOAD",function() V6.Unload() end)
+    local s2=newSection(p,"About","?")
+    Label(s2,"UNNAMED ENHANCEMENTS V6",TH.ac)
+    Label(s2,"Built by Olivia")
+    Label(s2,"discord.gg/ojailbreaks",TH.ac2)
+end)
+
+-- open AC tab first
+openTab("AC SAFE")
+
+------------------------------------------------------
+-- ENGINES — gated by master toggles for zero cost when off
+------------------------------------------------------
+local function alive(p) return p and p~=LP and p.Character and p.Character.Parent and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChildOfClass("Humanoid") and p.Character:FindFirstChildOfClass("Humanoid").Health>0 end
+local function enemyOf(p) if not T.RageIgnoreTeam then return true end; return p.Team~=LP.Team end
+local function w2s(pos) local v,on=Camera:WorldToViewportPoint(pos); return Vector2.new(v.X,v.Y),on,v.Z end
+local function los(from,hit) local d=hit.Position-from; local rp=RaycastParams.new(); rp.FilterDescendantsInstances={LP.Character,Camera}; rp.FilterType=Enum.RaycastFilterType.Exclude; local r=Workspace:Raycast(from,d,rp); if not r then return true end; return r.Instance:IsDescendantOf(hit.Parent) end
+local function bestHitbox(char)
+    local name=O.RageHitbox or "Head"
+    if name=="Nearest" then local m=UserInputService:GetMouseLocation(); local best,bd; for _,n in ipairs({"Head","UpperTorso","Torso","HumanoidRootPart"}) do local p=char:FindFirstChild(n); if p then local s,on=w2s(p.Position); if on then local d=(s-m).Magnitude; if not bd or d<bd then bd,best=d,p end end end end; return best end
+    if name=="MultiScan" then
+        local best,bw
+        for n,w in pairs({Head=O.RageHbHead,UpperTorso=O.RageHbChest,HumanoidRootPart=O.RageHbPelvis,LeftUpperArm=O.RageHbArms,RightUpperArm=O.RageHbArms,LeftUpperLeg=O.RageHbLegs,RightUpperLeg=O.RageHbLegs}) do
+            local pt=char:FindFirstChild(n); if pt and w>0 then if not bw or w>bw then bw,best=w,pt end end
+        end
+        return best or char:FindFirstChild("HumanoidRootPart")
+    end
+    return char:FindFirstChild(name) or char:FindFirstChild("HumanoidRootPart")
+end
+
+-- backtrack — only when rage on
+local function bt_push(p) if not alive(p) then return end; local hrp=p.Character.HumanoidRootPart; local buf=S.backtrack[p] or {}; S.backtrack[p]=buf; table.insert(buf,1,{t=os.clock(),pos=hrp.Position,vel=hrp.AssemblyLinearVelocity}); local c=os.clock()-1; while buf[#buf] and buf[#buf].t<c do buf[#buf]=nil end end
+local function bt_sample(p,ms) local buf=S.backtrack[p]; if not buf then return nil end; local tg=os.clock()-math.clamp(ms,0,1000)/1000; for _,r in ipairs(buf) do if r.t<=tg then return r end end; return buf[1] end
+local function self_bt_push() if not alive(LP) then return end; table.insert(S.selfPath,1,{t=os.clock(),cf=LP.Character.HumanoidRootPart.CFrame}); while S.selfPath[#S.selfPath] and os.clock()-S.selfPath[#S.selfPath].t>2 do S.selfPath[#S.selfPath]=nil end end
+local function self_bt(ms) local tg=os.clock()-ms/1000; for _,r in ipairs(S.selfPath) do if r.t<=tg then return r end end; return S.selfPath[#S.selfPath] end
+
+local function hitchance(from,part,vel,pred)
+    if not T.RageHcGate then return 100 end
+    local n=O.RageHcSamples or 12; local hits=0
+    local j=math.min(vel.Magnitude/40,1.5)
+    for i=1,n do
+        local ox=(math.random()*2-1)*j; local oz=(math.random()*2-1)*j
+        local tgt=part.Position+Vector3.new(ox,0,oz)+vel*pred
+        local rp=RaycastParams.new(); rp.FilterDescendantsInstances={LP.Character,Camera}; rp.FilterType=Enum.RaycastFilterType.Exclude
+        local r=Workspace:Raycast(from,tgt-from,rp)
+        if not r or r.Instance:IsDescendantOf(part.Parent) then hits+=1 end
+    end
+    return hits/n*100
+end
+local function autowall(from,part)
+    if not T.AwOn then return 100 end
+    local dir=part.Position-from; local rp=RaycastParams.new(); rp.FilterDescendantsInstances={LP.Character,Camera}; rp.FilterType=Enum.RaycastFilterType.Exclude
+    local p=from; local rem=100; local loss=O.AwLoss or 25
+    for i=1,O.AwPen do local r=Workspace:Raycast(p,dir.Unit*dir.Magnitude,rp); if not r then return rem end; if r.Instance:IsDescendantOf(part.Parent) then return rem end; rem-=loss; if rem<O.AwMin then return 0 end; p=r.Position+dir.Unit*0.5 end
+    return rem
+end
+local function resolver_fix(p,part)
+    if not T.ResOn then return part.Position end
+    local r=S.resolver[p] or {yaw=0,misses=0}; S.resolver[p]=r
+    local mode=O.ResMode; local step=O.ResStep; local yaw=r.yaw
+    if mode=="Brute" then yaw=(r.misses*step)%360
+    elseif mode=="Jitter" then yaw=((os.clock()*4)%2<1) and step or -step
+    elseif mode=="LBY" then yaw=math.sin(os.clock()*2)*60
+    elseif mode=="Memory" then yaw=r.lastHit or 0
+    elseif mode=="Adaptive" then local v=part.AssemblyLinearVelocity.Magnitude; yaw=(v>2 and 0) or ((r.misses*step)%360)
+    elseif mode=="LBY-Freestand" then local to=LP.Character.HumanoidRootPart.Position-part.Position; yaw=math.deg(math.atan2(to.X,to.Z))
+    elseif mode=="Velocity" then local v=part.AssemblyLinearVelocity; yaw=math.deg(math.atan2(v.X,v.Z)) end
+    local off=(p.Character.HumanoidRootPart.CFrame*CFrame.Angles(0,math.rad(yaw),0)).LookVector*0.3
+    return part.Position+off
+end
+local function resolver_hit(p) local r=S.resolver[p] or {yaw=0,misses=0}; r.lastHit=r.yaw; r.misses=0; S.resolver[p]=r end
+
+local function pickTarget()
+    if not T.RageEnabled then return nil end
+    local km=O.RageKeyMode
+    if (km=="Hold" or km=="Toggle") and not K.RageKey.state then return nil end
+    if T.RageLockTarget and S.target and alive(S.target) and enemyOf(S.target) then return S.target end
+    local m=UserInputService:GetMouseLocation(); local fov=O.RageFov; local prio=O.RagePrio
+    local best,bs
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p~=LP and alive(p) and enemyOf(p) then
+            local hum=p.Character:FindFirstChildOfClass("Humanoid")
+            if not (T.RageIgnoreLow and hum and hum.Health<10) then
+                local part=bestHitbox(p.Character)
+                if part then
+                    local s,on=w2s(part.Position); local d2=(s-m).Magnitude; local d3=(part.Position-Camera.CFrame.Position).Magnitude
+                    if on and d2<=fov and d3<=O.RageMaxDist then
+                        if (not T.RageVisibleOnly) or los(Camera.CFrame.Position,part) then
+                            local sc
+                            if prio=="FOV" then sc=d2
+                            elseif prio=="Distance" then sc=d3
+                            elseif prio=="Health" or prio=="LowestHP" then sc=hum and hum.Health or 100
+                            elseif prio=="Crosshair" then sc=d2*0.6+d3*0.4
+                            elseif prio=="HighestDmg" then sc=-autowall(Camera.CFrame.Position,part)
+                            elseif prio=="Random" then sc=math.random()
+                            else sc=d2 end
+                            if not bs or sc<bs then best,bs=p,sc end
                         end
                     end
                 end
@@ -471,1242 +718,463 @@ local function bestTarget()
     return best
 end
 
-local lockedLast
-bin(RunService.RenderStepped:Connect(function()
-  pcall(function()
-    if S.aimbot.enable and S.aimbot.show_fov then
-        aimCircle.Visible = true
-        aimCircle.Radius  = S.aimbot.fov
-        aimCircle.Color   = S.aimbot.fov_color
-        aimCircle.Position= Camera.ViewportSize / 2
-    else aimCircle.Visible = false end
-
-    if not S.aimbot.enable then snapLine.Visible=false return end
-    if not keyHeld(Library.Options.aimbot_key) then snapLine.Visible=false return end
-
-    local tgt = bestTarget()
-    if not tgt then snapLine.Visible=false lockedLast=nil return end
-    local part = tgt.Character and tgt.Character:FindFirstChild(S.aimbot.hit_part or "Head")
-    if not part then snapLine.Visible=false return end
-
-    local target = predict(part, S.aimbot.prediction or 0)
-    local smooth = math.clamp((101 - math.clamp(S.aimbot.smoothing,1,100)) / 100, 0.02, 1)
-    local look = (target - Camera.CFrame.Position).Unit
-    local blend = Camera.CFrame.LookVector:Lerp(look, smooth)
-    pcall(function()
-        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, Camera.CFrame.Position + blend)
-    end)
-
-    if S.aimbot.snapline then
-        local on, scr = onscreen(target)
-        if on then
-            snapLine.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
-            snapLine.To = scr
-            snapLine.Color = S.aimbot.snapline_color
-            snapLine.Visible = true
-        end
-    else snapLine.Visible = false end
-
-    if S.aimbot.lock_sound and lockedLast ~= tgt then
-        lockedLast = tgt
-        pcall(function() playSound(3779005184, 0.6, 1) end)
-    end
-  end)
-end))
-
--- ============================================================================
--- TRIGGERBOT
--- ============================================================================
-bin(task.spawn(function()
-    while task.wait(0.03) do
-        if not S.triggerbot.enable then continue end
-        local rp = RaycastParams.new()
-        rp.FilterDescendantsInstances = { LocalPlayer.Character }
-        rp.FilterType = Enum.RaycastFilterType.Exclude
-        local r = Workspace:Raycast(Camera.CFrame.Position,
-                                    Camera.CFrame.LookVector * S.triggerbot.max_dist, rp)
-        if not r then continue end
-        local part = r.Instance
-        local hum = part.Parent and part.Parent:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health <= 0 then continue end
-        if S.triggerbot.headshot_only and part.Name ~= "Head" then continue end
-        local plr = Players:GetPlayerFromCharacter(part.Parent)
-        if S.triggerbot.team_check and plr and isTeammate(plr) then continue end
-        task.wait(S.triggerbot.reaction)
-        pcall(function()
-            local fc = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
-            if fc and fc.LocalFighter then fc.LocalFighter:Input("StartShooting") end
-        end)
-        task.wait(S.triggerbot.delay)
-        pcall(function()
-            local fc = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
-            if fc and fc.LocalFighter then fc.LocalFighter:Input("StopShooting") end
-        end)
-    end
-end))
-
--- ============================================================================
--- SILENT AIM
--- ============================================================================
-local silentCircle = Drawing.new("Circle")
-silentCircle.Thickness=1 silentCircle.NumSides=64 silentCircle.Filled=false silentCircle.Visible=false
-bin(silentCircle)
-
-bin(RunService.RenderStepped:Connect(function()
-  pcall(function()
-    if S.silent.enable and S.silent.show_fov then
-        silentCircle.Visible = true
-        silentCircle.Radius  = S.silent.fov
-        silentCircle.Color   = S.silent.fov_color
-        silentCircle.Position= Camera.ViewportSize / 2
-    else silentCircle.Visible = false end
-  end)
-end))
-
-local function silentTarget()
-    if not S.silent.enable then return nil end
-    local center = Camera.ViewportSize / 2
-    local best, bestDist = nil, S.silent.fov
-    for _, ent in ipairs(CollectionService:GetTagged("Entity")) do
-        if ent ~= getChar() then
-            local part = ent:FindFirstChild(S.silent.hit_part or "Head", true)
-            if part and part:IsA("BasePart") then
-                local on, scr = onscreen(part.Position)
-                if on then
-                    local d = (scr - center).Magnitude
-                    if d < bestDist then bestDist = d best = part end
-                end
-            end
-        end
-    end
-    return best
+local function fire_shot()
+    local now=os.clock()
+    while #S.shotsBucket>0 and now-S.shotsBucket[1]>1 do table.remove(S.shotsBucket,1) end
+    if not T.RageFastFire and #S.shotsBucket>=O.RageSPS then return end
+    if now-S.lastShot<(O.RageShotDelay or 0.05) then return end
+    S.lastShot=now
+    safe(function() VirtualInput:SendMouseButtonEvent(0,0,0,true,game,1); task.wait(); VirtualInput:SendMouseButtonEvent(0,0,0,false,game,1) end)
+    table.insert(S.shotsBucket,now)
+    S.stats.shots+=1
+    S.onShotUntil = now + (O.AAXOSms or 0)/1000
+    S.defUntil    = now + (O.AAXDefMs or 0)/1000
+    if T.RageAutoCrouch and alive(LP) then local h=LP.Character:FindFirstChildOfClass("Humanoid"); if h then safe(function() h.Jump=false; h:ChangeState(Enum.HumanoidStateType.PlatformStanding) end) end end
 end
 
-pcall(function()
-    local rs = ReplicatedStorage
-    local useItem = rs:FindFirstChild("Remotes")
-        and rs.Remotes:FindFirstChild("Replication")
-        and rs.Remotes.Replication:FindFirstChild("Fighter")
-        and rs.Remotes.Replication.Fighter:FindFirstChild("UseItem")
-    local ok1, Utility = pcall(require, rs.Modules.Utility)
-    local ok2, EnumLib = pcall(require, rs.Modules.EnumLibrary)
-    if not (useItem and hookfunction and newcclosure and ok1 and ok2) then return end
+-- silent aim hook
+local function try_hook()
+    if T.AcNoHook then return end
+    local mt=getrawmetatable and getrawmetatable(game); if not mt or not setreadonly then return end
+    safe(setreadonly,mt,false)
+    local oldIdx=mt.__index; local oldNc=mt.__namecall
+    mt.__index = newcclosure(function(self,k)
+        if self==LP and k=="GetMouse" then local real=oldIdx(self,k); return function(...) local m=real(...); if S.aimPos and T.RageEnabled and T.RageSilent then safe(function() m.Hit=CFrame.new(S.aimPos) end) end; return m end end
+        return oldIdx(self,k)
+    end)
+    mt.__namecall = newcclosure(function(self,...)
+        if S.aimPos and T.RageSilent and T.RageEnabled then local method=getnamecallmethod(); if method=="ScreenPointToRay" or method=="ViewportPointToRay" then local dir=(S.aimPos-Camera.CFrame.Position).Unit; return Ray.new(Camera.CFrame.Position,dir*500) end end
+        return oldNc(self,...)
+    end)
+    safe(setreadonly,mt,true)
+end
+pcall(try_hook)
 
-    local original
-    original = hookfunction(useItem.FireServer, newcclosure(function(self, a1, a2, a3, a4, ...)
-        if S.silent.enable and a2 == EnumLib:ToEnum("StartShooting") then
-            local hrp = getHRP()
-            local tgt = silentTarget()
-            if hrp and tgt and (S.silent.hitchance >= 100 or math.random(1,100) <= S.silent.hitchance) then
-                local cf = tgt.CFrame
-                a3 = {
-                    [utf8.char(1)] = {
-                        [utf8.char(0)] = Utility:EncodeCFrame(CFrame.lookAt(hrp.Position, tgt.Position)),
-                        [utf8.char(1)] = Utility:EncodeCFrame(cf),
-                        [utf8.char(2)] = tgt,
-                        [utf8.char(3)] = Utility:EncodeCFrame(cf:ToObjectSpace(CFrame.new(tgt.Position))),
-                    },
-                }
-            end
-        end
-        return original(self, a1, a2, a3, a4, ...)
-    end))
-end)
-
--- ============================================================================
--- RAGEBOT
--- ============================================================================
-local function ragePickTarget()
-    local best, bestVal = nil, math.huge
-    local hrp = getHRP() if not hrp then return nil end
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and alive(plr) and (not S.ragebot.team_check or not isTeammate(plr)) then
-            local part = plr.Character:FindFirstChild(S.ragebot.force_body and "HumanoidRootPart" or "Head")
-            if part then
-                local d3 = (part.Position - hrp.Position).Magnitude
-                if d3 <= S.ragebot.max_range then
-                    local val = d3
-                    if S.ragebot.priority == "lowest_hp" then val = plr.Character:FindFirstChildOfClass("Humanoid").Health end
-                    if val < bestVal then bestVal=val best=plr end
-                end
-            end
-        end
-    end
-    return best
+local function rage_tick()
+    if not T.RageEnabled then S.target=nil; S.aimPos=nil; return end
+    if os.clock()-S.lastKillAt<O.RageKillDelay then return end
+    local tgt=pickTarget(); if not tgt then S.target=nil; S.aimPos=nil; return end
+    if S.target~=tgt then if os.clock()-S.lastSwitch<O.RageSwitch then return end; S.lastSwitch=os.clock() end
+    S.target=tgt
+    local part=bestHitbox(tgt.Character); if not part then return end
+    local aim=part.Position
+    if T.RageBT then local rec=bt_sample(tgt,O.RageBTms); if rec then aim=rec.pos end end
+    if T.RagePred then local vel=part.AssemblyLinearVelocity; if T.RageAirPred or math.abs(vel.Y)<1 then aim+=vel*O.RagePredFactor end; if T.RageCurvePred then aim+=Vector3.new(0,-0.5*9.81*O.RagePredFactor^2,0) end end
+    aim = aim + (resolver_fix(tgt,part)-part.Position)
+    local hc=hitchance(Camera.CFrame.Position,part,part.AssemblyLinearVelocity,O.RagePredFactor)
+    local dmg=autowall(Camera.CFrame.Position,part); S.hitChance=hc
+    if hc<O.RageHc or dmg<O.RageMinDmg then S.aimPos=nil; return end
+    if T.RageSafepoint then aim=aim:Lerp(part.Position,O.RageSPBias) end
+    if T.RageForceHS and tgt.Character:FindFirstChild("Head") then aim=tgt.Character.Head.Position
+    elseif T.RageForceBaim then local b=tgt.Character:FindFirstChild("UpperTorso") or tgt.Character:FindFirstChild("Torso"); if b then aim=b.Position end end
+    S.aimPos=aim
+    if T.RageAutoFire then local tries = T.RageMagicBullet and O.RageMagicTries or 1; for i=1,tries do fire_shot(); if i<tries then task.wait() end end end
 end
 
-bin(task.spawn(function()
-    while task.wait(0.05) do
-        if not S.ragebot.enable then continue end
-        local tgt = ragePickTarget()
-        if not tgt then continue end
-        local part = tgt.Character and tgt.Character:FindFirstChild(S.ragebot.force_body and "HumanoidRootPart" or "Head")
-        if not part then continue end
-        local hrp = getHRP() if not hrp then continue end
-        local savedCF = hrp.CFrame
-        local targetPos = S.ragebot.prediction and predict(part, 0.15) or part.Position
-        pcall(function()
-            hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, S.ragebot.y_offset, 0))
-            Camera.CFrame = CFrame.lookAt(hrp.Position, targetPos)
-            if S.ragebot.autoshoot then
-                local fc = require(LocalPlayer.PlayerScripts.Controllers.FighterController)
-                if fc and fc.LocalFighter then
-                    fc.LocalFighter:Input("StartShooting")
-                    task.wait(0.05)
-                    fc.LocalFighter:Input("StopShooting")
-                end
-            end
-        end)
-        task.wait(S.ragebot.tp_duration)
-        pcall(function() hrp.CFrame = savedCF end)
+-- anti-aim engine — per-state
+local function getState()
+    if not alive(LP) then return "none" end
+    local h=LP.Character:FindFirstChildOfClass("Humanoid"); if not h then return "none" end
+    local s=h:GetState()
+    if s==Enum.HumanoidStateType.Freefall or s==Enum.HumanoidStateType.Jumping then return "Air" end
+    local v=LP.Character.HumanoidRootPart.AssemblyLinearVelocity
+    if v.Magnitude>2 then if T.RageSlow and K and K.RageSlowKey and K.RageSlowKey.state then return "SlowWalk" end; return "Move" end
+    return "Stand"
+end
+local function stateOverride()
+    local st=getState()
+    local map={Stand=O.AAXStand,Move=O.AAXMove,Air=O.AAXAir,Crouch=O.AAXCrouch,SlowWalk=O.AAXSlowWalk}
+    local mode=map[st]; if not mode or mode=="Inherit" then return nil end
+    if mode=="Backwards" then return math.pi
+    elseif mode=="Jitter" then return ((os.clock()*6)%2<1) and math.pi/2 or -math.pi/2
+    elseif mode=="Spin" then return (os.clock()*8)%(math.pi*2)
+    elseif mode=="Sideways" then return math.pi/2
+    elseif mode=="Zero" then return 0 end
+end
+
+local function at_targets_yaw()
+    local best,bd
+    for _,p in ipairs(Players:GetPlayers()) do if p~=LP and alive(p) and enemyOf(p) then local hrp=p.Character.HumanoidRootPart; local d=(hrp.Position-LP.Character.HumanoidRootPart.Position).Magnitude; local sc=T.AAXAtBest and -d or d; if not bd or sc<bd then bd,best=sc,hrp end end end
+    if not best then return 0 end
+    local to=best.Position-LP.Character.HumanoidRootPart.Position
+    return math.atan2(to.X,to.Z)+math.pi
+end
+local function freestand_side()
+    if not alive(LP) then return 1 end
+    local hrp=LP.Character.HumanoidRootPart; local rp=RaycastParams.new(); rp.FilterDescendantsInstances={LP.Character,Camera}; rp.FilterType=Enum.RaycastFilterType.Exclude
+    local d=O.AAXFreeDist
+    local rH=Workspace:Raycast(hrp.Position,hrp.CFrame.RightVector*d,rp)
+    local lH=Workspace:Raycast(hrp.Position,-hrp.CFrame.RightVector*d,rp)
+    local rS=rH and (d-(rH.Position-hrp.Position).Magnitude) or 0
+    local lS=lH and (d-(lH.Position-hrp.Position).Magnitude) or 0
+    return rS>=lS and 1 or -1
+end
+local function manual_dir() if not T.AAXManual then return nil end; if K.AAXML.state then return math.pi*0.5 end; if K.AAXMR.state then return -math.pi*0.5 end; if K.AAXMB.state then return math.pi end; if K.AAXMF.state then return 0 end end
+
+local function apply_hrp(cf)
+    if T.AcNoCFrame then return end
+    if not alive(LP) then return end
+    local hrp=LP.Character.HumanoidRootPart; local hum=LP.Character:FindFirstChildOfClass("Humanoid"); if not hum then return end
+    if not T.AcNoAutoRot then safe(function() hum.AutoRotate=false end) end
+    safe(function() hrp.CFrame=cf end)
+end
+
+local function aa_tick()
+    if not T.AAEnabled and not T.AAXOn then return end
+    if not alive(LP) then return end
+    local hrp=LP.Character.HumanoidRootPart
+    local yaw, pitch, roll = 0, 0, 0
+    -- base yaw
+    local ov = stateOverride()
+    if ov then yaw = ov
+    elseif T.AAXOn then
+        local base=O.AAXBase
+        local md=manual_dir()
+        if md then yaw=md
+        elseif base=="At-Targets" and T.AAXAtTgt then yaw=at_targets_yaw()
+        elseif base=="Freestanding" and T.AAXFree then yaw=math.pi+freestand_side()*math.rad(O.AAXDesyncR)
+        elseif base=="Target" and S.target and alive(S.target) then local to=S.target.Character.HumanoidRootPart.Position-hrp.Position; yaw=math.atan2(to.X,to.Z)+math.pi
+        elseif base=="Local" then yaw=select(2,Camera.CFrame:ToEulerAnglesYXZ())
+        end
+        yaw+=math.rad(O.AAXYawAdd or 0)
+        local mod=O.AAXMod; local deg=math.rad(O.AAXModDeg or 15); local hz=O.AAXModHz or 8
+        if mod=="Offset" then yaw+=deg
+        elseif mod=="Spin" then yaw+=(os.clock()*hz)%(math.pi*2)
+        elseif mod=="Jitter" then yaw+=((os.clock()*hz)%2<1) and deg or -deg
+        elseif mod=="Random" then yaw+=math.rad(math.random(-math.deg(deg),math.deg(deg)))
+        elseif mod=="Sway" then yaw+=math.sin(os.clock()*hz)*deg
+        elseif mod=="3-way" then local ph=(math.floor(os.clock()*hz)%3); yaw+=(ph==0 and deg or ph==1 and -deg or 0) end
+        if T.AAXDesyncReal then S.aaSide=-S.aaSide; yaw+=math.rad((S.aaSide>0) and O.AAXDesyncR or -O.AAXDesyncL) end
+        if K.AAXFlip and K.AAXFlip.state then yaw=-yaw end
+        if T.AAXLBY then yaw+=math.sin(os.clock()*4)*math.rad(5) end
+        if T.AAXMicro then yaw+=math.rad(math.random(-(O.AAXMicroDeg or 3),O.AAXMicroDeg or 3)) end
+        if T.AAXOnShot and os.clock()<S.onShotUntil then yaw+=math.rad(O.AAXOSDeg or 180) end
+        if T.AAXDef and os.clock()<S.defUntil then yaw+=math.rad(math.sin(os.clock()*18)*25) end
+        local p=O.AAXPitch; local pd=math.rad(O.AAXPitchDeg or 89)
+        if p=="Down" then pitch=-pd elseif p=="Up" then pitch=pd elseif p=="Fake" then pitch=((math.floor(os.clock()*4)%2)==0) and -pd or pd elseif p=="Jitter" then pitch=(os.clock()*10)%2<1 and -pd or pd elseif p=="Random" then pitch=(math.random()*2-1)*pd end
+        local r=O.AAXRoll; local rd=math.rad(O.AAXRollDeg or 30)
+        if r=="Left" then roll=-rd elseif r=="Right" then roll=rd elseif r=="Alternate" then roll=((math.floor(os.clock()*2)%2)==0) and rd or -rd elseif r=="Sway" then roll=math.sin(os.clock()*2)*rd end
+        if T.AAXSway then yaw+=math.sin(os.clock()*(O.AAXSwayHz or 1.5))*math.rad(O.AAXSwayDeg or 8); pitch+=math.cos(os.clock()*(O.AAXSwayHz or 1.5))*math.rad((O.AAXSwayDeg or 8)*0.4) end
+    elseif T.AAEnabled then
+        local m=O.AAYawMode
+        if m=="Backwards" then yaw=math.pi elseif m=="Jitter" then yaw=((os.clock()*6)%2<1) and math.pi/2 or -math.pi/2 elseif m=="Spin" then yaw=(os.clock()*8)%(math.pi*2) elseif m=="Sideways" then yaw=math.pi/2 elseif m=="Random" then yaw=math.rad(math.random(-180,180)) elseif m=="LBY-Break" then yaw=math.sin(os.clock()*3)*math.pi end
+        if K.AAInvert and K.AAInvert.state then yaw=-yaw end
+        yaw+=math.rad(O.AADesync or 58)
+        if T.AAPitchOn then local p=O.AAPitch; if p=="Down" then pitch=math.rad(-89) elseif p=="Up" then pitch=math.rad(89) elseif p=="Jitter" then pitch=((os.clock()*10)%2<1) and math.rad(-89) or math.rad(89) end end
     end
-end))
+    apply_hrp(CFrame.new(hrp.Position)*CFrame.Angles(pitch,yaw,roll))
+    S.desyncYaw=yaw
+end
 
--- ============================================================================
--- ANTI-AIM
--- ============================================================================
-local aaT = 0
-bin(RunService.Heartbeat:Connect(function(dt)
-    if not S.anti_aim.enable then return end
-    aaT = aaT + dt
-    local hrp = getHRP() if not hrp then return end
-    local pitchDeg = 0
-    if S.anti_aim.pitch == "Up" then pitchDeg = -89
-    elseif S.anti_aim.pitch == "Down" then pitchDeg = 89
-    elseif S.anti_aim.pitch == "Zero" then pitchDeg = 0 end
-    local yawDeg = 0
-    if S.anti_aim.yaw == "Spin" then yawDeg = (aaT * S.anti_aim.yaw_speed * 60) % 360
-    elseif S.anti_aim.yaw == "Jitter" then yawDeg = (aaT * 60) % 2 < 1 and 180 or 0
-    elseif S.anti_aim.yaw == "Backward" then yawDeg = 180
-    elseif S.anti_aim.yaw == "Random" then yawDeg = math.random(0, 360) end
-    pcall(function()
-        hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(math.rad(pitchDeg), math.rad(yawDeg), 0)
+-- fake pos
+local function ghost(key,color) local g=V6.Ghosts[key]; if g and g.Parent then return g end; g=Instance.new("Part"); g.Size=Vector3.new(2,5,1); g.Anchored=true; g.CanCollide=false; g.Material=Enum.Material.ForceField; g.Color=color or TH.ac; g.Transparency=0.4; safe(function() g.Parent=Workspace end); V6.Ghosts[key]=g; return g end
+local function killGhost(k) if V6.Ghosts[k] then safe(function() V6.Ghosts[k]:Destroy() end); V6.Ghosts[k]=nil end end
+
+local function fakepos_tick()
+    if not T.FPOn then killGhost("g1"); killGhost("g2"); return end
+    if not alive(LP) then return end
+    local hrp=LP.Character.HumanoidRootPart; local e=O.FPEngine; local R=O.FPRadius; local H=O.FPHeight; local t=os.clock()*(O.FPSpeed or 3)
+    local p1,p2
+    if e=="Static" then p1=hrp.Position+Vector3.new(R,H,0); p2=hrp.Position-Vector3.new(R,H,0)
+    elseif e=="Orbit" then p1=hrp.Position+Vector3.new(math.cos(t)*R,H,math.sin(t)*R); p2=p1
+    elseif e=="OrbitDual" then p1=hrp.Position+Vector3.new(math.cos(t)*R,H,math.sin(t)*R); p2=hrp.Position+Vector3.new(math.cos(t+math.pi)*R,H,math.sin(t+math.pi)*R)
+    elseif e=="Random" then p1=hrp.Position+Vector3.new((math.random()*2-1)*R,H,(math.random()*2-1)*R); p2=hrp.Position-(p1-hrp.Position)
+    elseif e=="Behind" then p1=hrp.Position-hrp.CFrame.LookVector*R+Vector3.new(0,H,0); p2=p1
+    elseif e=="Teleport" then p1=hrp.Position+(((math.floor(t*2)%2)==0) and Vector3.new(R,H,0) or Vector3.new(-R,H,0)); p2=p1
+    elseif e=="Zigzag" then p1=hrp.Position+Vector3.new(math.sin(t*3)*R,H,math.cos(t)*R); p2=p1
+    elseif e=="Figure8" then p1=hrp.Position+Vector3.new(math.sin(t)*R,H,math.sin(t*2)*R*0.5); p2=hrp.Position-(p1-hrp.Position)
+    elseif e=="PathReplay" then local rec=self_bt(O.FPReplayMs or 350); p1=rec and rec.cf.Position or hrp.Position; p2=hrp.Position+Vector3.new(math.cos(t)*R*0.5,H,math.sin(t)*R*0.5)
+    elseif e=="Mirror" then if S.target and alive(S.target) then local Tp=S.target.Character.HumanoidRootPart.Position; p1=Tp*2-hrp.Position+Vector3.new(0,H,0); p2=hrp.Position+(hrp.Position-Tp).Unit*R+Vector3.new(0,H,0) else p1=hrp.Position+Vector3.new(R,H,0); p2=hrp.Position-Vector3.new(R,H,0) end
+    elseif e=="PingTP" then local ph=(math.floor(t*2)%3); p1=(ph==0) and hrp.Position+Vector3.new(R,H,0) or (ph==1) and hrp.Position+Vector3.new(0,H,R) or hrp.Position-Vector3.new(R,H,0); p2=hrp.Position-(p1-hrp.Position)
+    elseif e=="Split" then p1=hrp.Position+Vector3.new(R,H,R); p2=hrp.Position+Vector3.new(-R,H,-R)
+    elseif e=="Choke-Freeze" then p1=S.frozenAt or hrp.Position; p2=hrp.Position+Vector3.new(math.cos(t)*R,H,math.sin(t)*R)
+    elseif e=="Warp" then p1=hrp.Position+hrp.CFrame.LookVector*R+Vector3.new(0,H,0); p2=hrp.Position-hrp.CFrame.LookVector*R+Vector3.new(0,H,0)
+    elseif e=="MouseDrag" then local m=UserInputService:GetMouseLocation(); local ray=Camera:ViewportPointToRay(m.X,m.Y,R); p1=ray.Origin+ray.Direction*R; p2=p1 end
+    if T.FPBlink and K.FPBlinkKey.state then p1=p1+hrp.CFrame.RightVector*(O.FPBlinkDist or 8) end
+    local col = T.FPColor and Color3.fromHSV((os.clock()*0.2)%1,0.9,1) or (O.FPCol or TH.ac)
+    local g1=ghost("g1",col); safe(function() g1.CFrame=CFrame.new(p1); g1.Transparency=O.FPAlpha; g1.Color=col end)
+    if T.FPDual and p2 then local g2=ghost("g2",col:Lerp(Color3.new(1,1,1),0.4)); safe(function() g2.CFrame=CFrame.new(p2); g2.Transparency=(O.FPAlpha or 0.4)*0.9 end) else killGhost("g2") end
+end
+
+-- movement
+local flyBV, flyBG
+local function fly_update()
+    if not alive(LP) then return end
+    local hrp=LP.Character.HumanoidRootPart; local on=T.Fly or K.FlyKey.state
+    if on and not T.AcNoBodyMover then
+        if not flyBV then flyBV=Instance.new("BodyVelocity"); flyBV.MaxForce=Vector3.new(1,1,1)*1e9; flyBV.Velocity=Vector3.new(); safe(function() flyBV.Parent=hrp end); flyBG=Instance.new("BodyGyro"); flyBG.MaxTorque=Vector3.new(1,1,1)*1e9; safe(function() flyBG.Parent=hrp end) end
+        local c=Camera.CFrame; local v=Vector3.new()
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then v+=c.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then v-=c.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then v-=c.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then v+=c.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then v+=Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then v-=Vector3.new(0,1,0) end
+        flyBV.Velocity = v.Magnitude>0 and v.Unit*O.FlySpd or Vector3.new(); flyBG.CFrame=c
+    elseif flyBV then safe(function() flyBV:Destroy() end); safe(function() flyBG:Destroy() end); flyBV=nil; flyBG=nil end
+end
+local function move_tick()
+    if not alive(LP) then return end
+    local hum=LP.Character:FindFirstChildOfClass("Humanoid"); if not hum then return end
+    if T.WsOn then safe(function() hum.WalkSpeed=O.Ws end) end
+    if T.JpOn then safe(function() hum.JumpPower=O.Jp end) end
+    if T.Bhop and hum:GetState()==Enum.HumanoidStateType.Landed then safe(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end) end
+    if T.Noclip then for _,p in ipairs(LP.Character:GetDescendants()) do if p:IsA("BasePart") then safe(function() p.CanCollide=false end) end end end
+    fly_update()
+end
+C(UserInputService.JumpRequest:Connect(function() if T.InfJump and alive(LP) then safe(function() LP.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping) end) end end))
+
+-- world
+local function world_tick()
+    safe(function()
+        Lighting.FogEnd = T.NoFog and 1e9 or S.origFog
+        Lighting.Brightness = T.FullBright and O.Bright or S.origBright
+        if T.TimeLock then Lighting.ClockTime=12 end
+        Camera.FieldOfView = T.CamFovOn and O.CamFov or 70
+        if T.ThirdP then LP.CameraMode=Enum.CameraMode.Classic; LP.CameraMaxZoomDistance=O.TPDist; LP.CameraMinZoomDistance=O.TPDist
+        else LP.CameraMaxZoomDistance=128; LP.CameraMinZoomDistance=0.5 end
     end)
-end))
+end
 
--- ============================================================================
--- ESP
--- ============================================================================
-local skeletonLinks = {
+-- ESP — lazy drawings
+local SKEL_PAIRS = {
     {"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
     {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
     {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
     {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
     {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
 }
-
-local espCache = {}
-local function newEsp()
-    local e = {
-        box=Drawing.new("Square"), box_out=Drawing.new("Square"),
-        name=Drawing.new("Text"), health=Drawing.new("Text"),
-        hp_bar=Drawing.new("Line"), hp_bg=Drawing.new("Line"),
-        dist=Drawing.new("Text"), weapon=Drawing.new("Text"),
-        tracer=Drawing.new("Line"), dot=Drawing.new("Circle"),
-        arrow_a=Drawing.new("Line"), arrow_b=Drawing.new("Line"), arrow_c=Drawing.new("Line"),
-        skeleton={},
-    }
-    for i=1,#skeletonLinks do
-        local l=Drawing.new("Line") l.Thickness=1 l.Visible=false
-        e.skeleton[i]=l
-    end
-    e.box.Filled=false e.box.Thickness=1 e.box.Visible=false
-    e.box_out.Filled=false e.box_out.Thickness=3 e.box_out.Color=Color3.new(0,0,0) e.box_out.Visible=false
-    for _,t in ipairs({e.name,e.health,e.dist,e.weapon}) do
-        t.Size=14 t.Center=true t.Outline=true t.Visible=false t.Font=Drawing.Fonts.Plex
-    end
-    e.hp_bar.Thickness=2 e.hp_bar.Visible=false
-    e.hp_bg.Thickness=4 e.hp_bg.Color=Color3.new(0,0,0) e.hp_bg.Visible=false
-    e.tracer.Thickness=1 e.tracer.Visible=false
-    e.dot.NumSides=16 e.dot.Radius=3 e.dot.Thickness=1 e.dot.Filled=true e.dot.Visible=false
-    for _,a in ipairs({e.arrow_a,e.arrow_b,e.arrow_c}) do a.Thickness=1 a.Visible=false end
-    return e
+local function esp_ensure(p)
+    local e=V6.ESP[p]; if e then return e end
+    e={bones={}, corners={}}
+    local hl=Instance.new("Highlight"); hl.FillTransparency=0.5; hl.Enabled=false; safe(function() hl.Parent=Workspace end); e.hl=hl
+    e.box=D(Drawing.new("Square")); e.box.Thickness=1; e.box.Filled=false; e.box.Visible=false
+    e.fill=D(Drawing.new("Square")); e.fill.Filled=true; e.fill.Visible=false
+    for i=1,8 do e.corners[i]=D(Drawing.new("Line")); e.corners[i].Thickness=1; e.corners[i].Visible=false end
+    e.name=D(Drawing.new("Text")); e.name.Size=14; e.name.Center=true; e.name.Outline=true; e.name.Visible=false; e.name.Font=3
+    e.wep=D(Drawing.new("Text")); e.wep.Size=12; e.wep.Center=true; e.wep.Outline=true; e.wep.Visible=false; e.wep.Font=3
+    e.hpbg=D(Drawing.new("Square")); e.hpbg.Filled=true; e.hpbg.Visible=false
+    e.hp=D(Drawing.new("Square")); e.hp.Filled=true; e.hp.Visible=false
+    e.hptxt=D(Drawing.new("Text")); e.hptxt.Size=11; e.hptxt.Center=true; e.hptxt.Outline=true; e.hptxt.Visible=false; e.hptxt.Font=3
+    e.dist=D(Drawing.new("Text")); e.dist.Size=12; e.dist.Center=true; e.dist.Outline=true; e.dist.Visible=false; e.dist.Font=3
+    e.tracer=D(Drawing.new("Line")); e.tracer.Thickness=1; e.tracer.Visible=false
+    e.headDot=D(Drawing.new("Circle")); e.headDot.Filled=true; e.headDot.NumSides=16; e.headDot.Visible=false
+    e.headCir=D(Drawing.new("Circle")); e.headCir.Filled=false; e.headCir.NumSides=24; e.headCir.Thickness=1; e.headCir.Visible=false
+    e.arrow=D(Drawing.new("Triangle")); e.arrow.Filled=true; e.arrow.Visible=false
+    for i=1,#SKEL_PAIRS do e.bones[i]=D(Drawing.new("Line")); e.bones[i].Thickness=1; e.bones[i].Visible=false end
+    V6.ESP[p]=e; return e
 end
-
-local function killEsp(plr)
-    local e = espCache[plr] if not e then return end
-    for _,d in pairs(e) do
-        if typeof(d)=="table" then
-            for _,ln in ipairs(d) do pcall(function() ln:Remove() end) end
-        else pcall(function() d:Remove() end) end
+local function hide_all(e)
+    for k,d in pairs(e) do
+        if k~="hl" and k~="bones" and k~="corners" and typeof(d)=="table" and d.Visible~=nil then d.Visible=false end
     end
-    espCache[plr] = nil
-    if plr.Character then
-        local hl = plr.Character:FindFirstChild("UEV3_Highlight") if hl then hl:Destroy() end
-        for _,v in ipairs(plr.Character:GetDescendants()) do
-            if v:IsA("BasePart") and v:GetAttribute("UEV3_ChamBackup") then
-                v.Material = Enum.Material[v:GetAttribute("UEV3_mat")] or Enum.Material.Plastic
-                v.Transparency = v:GetAttribute("UEV3_trans") or 0
-                v:SetAttribute("UEV3_ChamBackup", nil)
-            end
-        end
-    end
+    if e.bones then for _,b in ipairs(e.bones) do b.Visible=false end end
+    if e.corners then for _,c in ipairs(e.corners) do c.Visible=false end end
+    if e.hl then safe(function() e.hl.Enabled=false; e.hl.Adornee=nil end) end
 end
-
-local function hideEsp(e)
-    for _,d in pairs(e) do
-        if typeof(d)=="table" then
-            for _,ln in ipairs(d) do ln.Visible=false end
-        else pcall(function() d.Visible=false end) end
-    end
+local function esp_destroy(p)
+    local e=V6.ESP[p]; if not e then return end
+    if e.hl then safe(function() e.hl:Destroy() end) end
+    for k,d in pairs(e) do if k~="hl" and k~="bones" and k~="corners" and typeof(d)=="table" and d.Remove then safe(function() d:Remove() end) end end
+    if e.bones then for _,b in ipairs(e.bones) do safe(function() b:Remove() end) end end
+    if e.corners then for _,c in ipairs(e.corners) do safe(function() c:Remove() end) end end
+    V6.ESP[p]=nil
 end
+C(Players.PlayerRemoving:Connect(esp_destroy))
+C(Players.PlayerAdded:Connect(function(p) p.CharacterRemoving:Connect(function() local e=V6.ESP[p]; if e then hide_all(e) end end) end))
+for _,p in ipairs(Players:GetPlayers()) do if p~=LP then p.CharacterRemoving:Connect(function() local e=V6.ESP[p]; if e then hide_all(e) end end) end end
 
-bin(RunService.RenderStepped:Connect(function()
-  pcall(function()
-    if not S.esp.enable then
-        for _, e in pairs(espCache) do hideEsp(e) end
-        return
-    end
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr == LocalPlayer then continue end
-        if not alive(plr) then if espCache[plr] then hideEsp(espCache[plr]) end continue end
-        if S.esp.team_check and isTeammate(plr) then if espCache[plr] then hideEsp(espCache[plr]) end continue end
-
-        local char = plr.Character
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        local head = char:FindFirstChild("Head")
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not (hrp and head and hum) then continue end
-
-        local dist = (hrp.Position - Camera.CFrame.Position).Magnitude
-        if dist > S.esp.max_dist then if espCache[plr] then hideEsp(espCache[plr]) end continue end
-
-        if not espCache[plr] then espCache[plr] = newEsp() end
-        local e = espCache[plr]
-
-        local onHead, headScr = onscreen(head.Position + Vector3.new(0,0.5,0))
-        local onFoot, footScr = onscreen(hrp.Position - Vector3.new(0,3,0))
-
-        if not (onHead and onFoot) then
-            hideEsp(e)
-            if S.esp.arrow_e then
-                local toTarget = (hrp.Position - Camera.CFrame.Position)
-                local flat = Vector3.new(toTarget.X, 0, toTarget.Z).Unit
-                local look = Vector3.new(Camera.CFrame.LookVector.X, 0, Camera.CFrame.LookVector.Z).Unit
-                local right = Camera.CFrame.RightVector
-                local angle = math.atan2(flat:Dot(right), flat:Dot(look))
-                local center = Camera.ViewportSize / 2
-                local radius = S.esp.arrow_radius
-                local pos = center + Vector2.new(math.sin(angle), -math.cos(angle)) * radius
-                local size = 14
-                local ang2 = angle + math.pi/2
-                local p1 = pos + Vector2.new(math.cos(ang2), math.sin(ang2)) * size
-                local p2 = pos - Vector2.new(math.cos(ang2), math.sin(ang2)) * size
-                local p3 = pos + Vector2.new(math.sin(angle), -math.cos(angle)) * size * 1.6
-                e.arrow_a.From=p1 e.arrow_a.To=p2 e.arrow_a.Color=S.esp.arrow_color e.arrow_a.Visible=true
-                e.arrow_b.From=p1 e.arrow_b.To=p3 e.arrow_b.Color=S.esp.arrow_color e.arrow_b.Visible=true
-                e.arrow_c.From=p2 e.arrow_c.To=p3 e.arrow_c.Color=S.esp.arrow_color e.arrow_c.Visible=true
-            end
-            continue
-        end
-        for _,a in ipairs({e.arrow_a,e.arrow_b,e.arrow_c}) do a.Visible=false end
-
-        local height = (footScr.Y - headScr.Y)
-        local width = height / 2
-        local topLeft = Vector2.new(headScr.X - width/2, headScr.Y)
-
-        if S.esp.box_e then
-            e.box.Size=Vector2.new(width, height) e.box.Position=topLeft
-            e.box.Color=S.esp.box_color e.box.Visible=true
-            if S.esp.box_outline then
-                e.box_out.Size=e.box.Size e.box_out.Position=e.box.Position e.box_out.Visible=true
-            else e.box_out.Visible=false end
-        else e.box.Visible=false e.box_out.Visible=false end
-
-        if S.esp.name_e then
-            e.name.Text = S.esp.name_display and plr.DisplayName or plr.Name
-            e.name.Position = Vector2.new(headScr.X, headScr.Y - 16)
-            e.name.Color = S.esp.name_color
-            e.name.Visible = true
-        else e.name.Visible=false end
-
-        if S.esp.hp_e then
-            local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-            if S.esp.hp_bar then
-                local barX = topLeft.X - 5
-                e.hp_bg.From = Vector2.new(barX, topLeft.Y)
-                e.hp_bg.To = Vector2.new(barX, topLeft.Y + height)
-                e.hp_bar.From = Vector2.new(barX, topLeft.Y + height * (1 - pct))
-                e.hp_bar.To = Vector2.new(barX, topLeft.Y + height)
-                e.hp_bar.Color = S.esp.hp_grad and Color3.fromHSV(0.33 * pct, 1, 1) or S.esp.hp_color
-                e.hp_bar.Visible=true e.hp_bg.Visible=true
-            end
-            e.health.Text = math.floor(hum.Health).."hp"
-            e.health.Position = Vector2.new(headScr.X, footScr.Y + 2)
-            e.health.Color = S.esp.hp_color
-            e.health.Visible = true
-        else e.hp_bar.Visible=false e.hp_bg.Visible=false e.health.Visible=false end
-
-        if S.esp.dist_e then
-            e.dist.Text = string.format("[%dm]", math.floor(dist))
-            e.dist.Position = Vector2.new(headScr.X, footScr.Y + 16)
-            e.dist.Color = S.esp.dist_color
-            e.dist.Visible = true
-        else e.dist.Visible=false end
-
-        if S.esp.wep_e then
-            local tool = char:FindFirstChildOfClass("Tool")
-            e.weapon.Text = tool and tool.Name or ""
-            e.weapon.Position = Vector2.new(headScr.X, footScr.Y + 30)
-            e.weapon.Color = S.esp.wep_color
-            e.weapon.Visible = tool ~= nil
-        else e.weapon.Visible=false end
-
-        if S.esp.tracer_e then
-            local origin
-            if S.esp.tracer_origin == "top" then origin = Vector2.new(Camera.ViewportSize.X/2, 0)
-            elseif S.esp.tracer_origin == "middle" then origin = Camera.ViewportSize/2
-            else origin = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y) end
-            e.tracer.From = origin e.tracer.To = footScr
-            e.tracer.Color = S.esp.tracer_color
-            e.tracer.Visible = true
-        else e.tracer.Visible=false end
-
-        if S.esp.dot_e then
-            e.dot.Position = headScr e.dot.Color = S.esp.dot_color e.dot.Visible = true
-        else e.dot.Visible=false end
-
-        if S.esp.skel_e then
-            for i, link in ipairs(skeletonLinks) do
-                local a = char:FindFirstChild(link[1])
-                local b = char:FindFirstChild(link[2])
-                local ln = e.skeleton[i]
-                if a and b and ln then
-                    local on1, s1 = onscreen(a.Position)
-                    local on2, s2 = onscreen(b.Position)
-                    if on1 and on2 then
-                        ln.From=s1 ln.To=s2 ln.Color=S.esp.skel_color ln.Visible=true
-                    else ln.Visible=false end
-                else if ln then ln.Visible=false end end
-            end
-        else for _,ln in ipairs(e.skeleton) do ln.Visible=false end end
-
-        if S.esp.hl_e then
-            local hl = char:FindFirstChild("UEV3_Highlight")
-            if not hl then
-                hl = Instance.new("Highlight") hl.Name="UEV3_Highlight" hl.Parent=char
-            end
-            hl.FillColor=S.esp.hl_fill hl.FillTransparency=S.esp.hl_fill_t
-            hl.OutlineColor=S.esp.hl_outline hl.OutlineTransparency=S.esp.hl_outline_t
-            hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        else local hl = char:FindFirstChild("UEV3_Highlight") if hl then hl:Destroy() end end
-
-        if S.esp.chams_e then
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-                    if not part:GetAttribute("UEV3_ChamBackup") then
-                        part:SetAttribute("UEV3_ChamBackup", true)
-                        part:SetAttribute("UEV3_mat", part.Material.Name)
-                        part:SetAttribute("UEV3_trans", part.Transparency)
-                    end
-                    part.Material = Enum.Material[S.esp.chams_mat] or Enum.Material.ForceField
-                    part.Color = S.esp.chams_color
-                    part.Transparency = S.esp.chams_t
-                end
-            end
-        end
-    end
-  end)
-end))
-
-Players.PlayerRemoving:Connect(killEsp)
-
--- ============================================================================
--- CROSSHAIR
--- ============================================================================
-local xhairLines = {}
-for i=1,4 do local l=Drawing.new("Line") l.Thickness=1 l.Visible=false xhairLines[i]=l bin(l) end
-local xhairDot = Drawing.new("Circle") xhairDot.Filled=true xhairDot.Radius=1 xhairDot.NumSides=12 xhairDot.Visible=false
-bin(xhairDot)
-local xhairCircle = Drawing.new("Circle") xhairCircle.Filled=false xhairCircle.NumSides=48 xhairCircle.Visible=false
-bin(xhairCircle)
-
-local xhairT = 0
-bin(RunService.RenderStepped:Connect(function(dt)
-  pcall(function()
-    xhairT = xhairT + dt
-    if not S.crosshair.enable then
-        for _,l in ipairs(xhairLines) do l.Visible=false end
-        xhairDot.Visible=false xhairCircle.Visible=false
-        return
-    end
-    local c = Camera.ViewportSize/2
-    local len, gap = S.crosshair.length, S.crosshair.gap
-    local col = S.crosshair.color
-    if S.crosshair.rainbow then col = rainbow(1) end
-    if S.crosshair.pulse then
-        local mul = 0.6 + 0.4 * math.abs(math.sin(xhairT * 3))
-        col = Color3.new(col.R * mul, col.G * mul, col.B * mul)
-    end
-    for _,l in ipairs(xhairLines) do l.Color=col l.Thickness=S.crosshair.thickness l.Visible=true end
-    xhairLines[1].From=c+Vector2.new(0,-gap) xhairLines[1].To=c+Vector2.new(0,-gap-len)
-    xhairLines[2].From=c+Vector2.new(0,gap)  xhairLines[2].To=c+Vector2.new(0,gap+len)
-    xhairLines[3].From=c+Vector2.new(-gap,0) xhairLines[3].To=c+Vector2.new(-gap-len,0)
-    xhairLines[4].From=c+Vector2.new(gap,0)  xhairLines[4].To=c+Vector2.new(gap+len,0)
-    if S.crosshair.circle then
-        xhairCircle.Position=c xhairCircle.Radius=S.crosshair.circle_radius xhairCircle.Color=col xhairCircle.Visible=true
-    else xhairCircle.Visible=false end
-    if S.crosshair.dot then
-        xhairDot.Position=c xhairDot.Color=S.crosshair.dot_color xhairDot.Visible=true
-    else xhairDot.Visible=false end
-  end)
-end))
-
--- ============================================================================
--- CHARACTER
--- ============================================================================
-bin(RunService.Heartbeat:Connect(function()
-    pcall(function()
-        local hum = getHum() if not hum then return end
-        if S.character.ws_e then pcall(function() hum.WalkSpeed = S.character.ws_v end) end
-        if S.character.jp_e then pcall(function() hum.UseJumpPower=true hum.JumpPower=S.character.jp_v end) end
-        if S.character.hip_e then pcall(function() hum.HipHeight = S.character.hip_v end) end
-        if S.character.gv_e then pcall(function() Workspace.Gravity = S.character.gv_v end) end
-        if S.character.bhop and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-            pcall(function()
-                if hum:GetState() == Enum.HumanoidStateType.Landed or hum.FloorMaterial ~= Enum.Material.Air then
-                    hum.Jump = true
-                end
-            end)
-        end
-        if S.character.god then pcall(function() hum.Health = hum.MaxHealth end) end
-        if S.character.heal_e then pcall(function() hum.Health = math.min(hum.Health + S.character.heal_r, hum.MaxHealth) end) end
-        if S.character.hitbox_e then
-            for _, plr in ipairs(Players:GetPlayers()) do
-                pcall(function()
-                    if plr ~= LocalPlayer and alive(plr) then
-                        local part = plr.Character:FindFirstChild(S.character.hitbox_p)
-                        if part then
-                            part.Size = Vector3.new(S.character.hitbox_s, S.character.hitbox_s, S.character.hitbox_s)
-                            part.CanCollide = false part.Transparency = 0.7
+local function esp_tick()
+    if not T.EspOn and not T.ChamsOn then for _,e in pairs(V6.ESP) do hide_all(e) end; return end
+    local rainbow = T.EspRainbow and Color3.fromHSV((os.clock()*0.3)%1,0.9,1)
+    for _,p in ipairs(Players:GetPlayers()) do if p~=LP then
+        local e=esp_ensure(p)
+        if not alive(p) then hide_all(e) else
+            local col = rainbow or (T.EspTeamColor and (p.TeamColor and p.TeamColor.Color)) or (enemyOf(p) and O.EspColor or O.EspFriendColor)
+            local show = T.EspOn and (enemyOf(p) or T.EspTeamShow)
+            local showCham = T.ChamsOn and (enemyOf(p) or T.EspTeamShow)
+            local char=p.Character; local hrp=char.HumanoidRootPart; local head=char:FindFirstChild("Head") or hrp
+            local hum=char:FindFirstChildOfClass("Humanoid")
+            if show then
+                local s1,on1=w2s(head.Position+Vector3.new(0,0.5,0))
+                local s2,on2=w2s(hrp.Position+Vector3.new(0,-3,0))
+                if on1 and on2 then
+                    local h=s2.Y-s1.Y; local w=h*0.55
+                    local x,y=s1.X-w/2, s1.Y
+                    -- box
+                    if T.EspBox then
+                        local st=O.EspBoxStyle
+                        if st=="Full" then
+                            e.box.Visible=true; e.corners[1].Visible=false
+                            e.box.Size=Vector2.new(w,h); e.box.Position=Vector2.new(x,y); e.box.Color=col
+                            for i=1,8 do e.corners[i].Visible=false end
+                        elseif st=="Corner" then
+                            e.box.Visible=false; local cl=w*0.25
+                            local pts={
+                                {Vector2.new(x,y),Vector2.new(x+cl,y)},{Vector2.new(x,y),Vector2.new(x,y+cl)},
+                                {Vector2.new(x+w,y),Vector2.new(x+w-cl,y)},{Vector2.new(x+w,y),Vector2.new(x+w,y+cl)},
+                                {Vector2.new(x,y+h),Vector2.new(x+cl,y+h)},{Vector2.new(x,y+h),Vector2.new(x,y+h-cl)},
+                                {Vector2.new(x+w,y+h),Vector2.new(x+w-cl,y+h)},{Vector2.new(x+w,y+h),Vector2.new(x+w,y+h-cl)},
+                            }
+                            for i=1,8 do e.corners[i].Visible=true; e.corners[i].From=pts[i][1]; e.corners[i].To=pts[i][2]; e.corners[i].Color=col end
+                        else
+                            e.box.Visible=true; e.box.Size=Vector2.new(w,h); e.box.Position=Vector2.new(x,y); e.box.Color=col
+                            for i=1,8 do e.corners[i].Visible=false end
                         end
-                    end
-                end)
+                        if T.EspFilled then e.fill.Visible=true; e.fill.Size=Vector2.new(w,h); e.fill.Position=Vector2.new(x,y); e.fill.Color=col; e.fill.Transparency=O.EspBoxOpa else e.fill.Visible=false end
+                    else e.box.Visible=false; e.fill.Visible=false; for i=1,8 do e.corners[i].Visible=false end end
+                    -- name
+                    if T.EspName then e.name.Visible=true; e.name.Text=p.Name; e.name.Size=O.EspFontSize or 14; e.name.Position=Vector2.new(s1.X,s1.Y-(O.EspFontSize or 14)-2); e.name.Color=col else e.name.Visible=false end
+                    if T.EspTeamTag and p.Team then e.wep.Visible=true; e.wep.Text="["..p.Team.Name.."]"; e.wep.Position=Vector2.new(s1.X,s2.Y+16); e.wep.Color=col else e.wep.Visible=false end
+                    -- health
+                    if T.EspHealth and hum and hum.MaxHealth>0 then
+                        local hp=math.clamp(hum.Health/hum.MaxHealth,0,1)
+                        e.hpbg.Visible=true; e.hp.Visible=true
+                        e.hpbg.Position=Vector2.new(x-6,y); e.hpbg.Size=Vector2.new(3,h); e.hpbg.Color=Color3.new(0,0,0)
+                        e.hp.Position=Vector2.new(x-6,y+h*(1-hp)); e.hp.Size=Vector2.new(3,h*hp)
+                        e.hp.Color=Color3.fromRGB(math.floor(255-hp*255),math.floor(hp*255),40)
+                        if T.EspHealthText then e.hptxt.Visible=true; e.hptxt.Text=tostring(math.floor(hum.Health)); e.hptxt.Position=Vector2.new(x-14,y+h*(1-hp)-5); e.hptxt.Color=e.hp.Color else e.hptxt.Visible=false end
+                    else e.hpbg.Visible=false; e.hp.Visible=false; e.hptxt.Visible=false end
+                    -- dist
+                    if T.EspDist then e.dist.Visible=true; e.dist.Text=string.format("%.0fs",(hrp.Position-Camera.CFrame.Position).Magnitude); e.dist.Position=Vector2.new(s1.X,s2.Y+2); e.dist.Color=col else e.dist.Visible=false end
+                    -- tracer/snapline
+                    if T.EspTracer or T.EspSnapline then
+                        e.tracer.Visible=true; local vp=Camera.ViewportSize; local o=O.EspTracerO
+                        local src = T.EspSnapline and UserInputService:GetMouseLocation()
+                               or (o=="Bottom" and Vector2.new(vp.X/2,vp.Y))
+                               or (o=="Top" and Vector2.new(vp.X/2,0))
+                               or (o=="Center" and Vector2.new(vp.X/2,vp.Y/2))
+                               or UserInputService:GetMouseLocation()
+                        e.tracer.From=src; e.tracer.To=Vector2.new(s2.X,s2.Y); e.tracer.Color=col
+                    else e.tracer.Visible=false end
+                    -- head dot/circle
+                    if T.EspHeadDot then local hs,hon=w2s(head.Position); if hon then e.headDot.Visible=true; e.headDot.Position=hs; e.headDot.Radius=3; e.headDot.Color=col else e.headDot.Visible=false end else e.headDot.Visible=false end
+                    if T.EspHeadCircle then local hs,hon=w2s(head.Position); if hon then e.headCir.Visible=true; e.headCir.Position=hs; e.headCir.Radius=h*0.09; e.headCir.Color=col else e.headCir.Visible=false end else e.headCir.Visible=false end
+                    -- skeleton
+                    if T.EspSkeleton then
+                        for i,pair in ipairs(SKEL_PAIRS) do
+                            local a=char:FindFirstChild(pair[1]); local b=char:FindFirstChild(pair[2])
+                            if a and b then local sa,oa=w2s(a.Position); local sb,ob=w2s(b.Position); if oa and ob then e.bones[i].Visible=true; e.bones[i].From=sa; e.bones[i].To=sb; e.bones[i].Color=col else e.bones[i].Visible=false end
+                            else e.bones[i].Visible=false end
+                        end
+                    else for i=1,#SKEL_PAIRS do e.bones[i].Visible=false end end
+                    -- offscreen arrow
+                    if T.EspOffscreen then
+                        local sc,onsc=w2s(hrp.Position)
+                        if not onsc then
+                            local vp=Camera.ViewportSize; local c=vp/2
+                            local dir=(Vector2.new(sc.X,sc.Y)-c)
+                            if dir.Magnitude<1 then dir=Vector2.new(1,0) end
+                            dir=dir.Unit
+                            local rad=O.EspArrowRad or 180
+                            local tip=c+dir*rad
+                            local perp=Vector2.new(-dir.Y,dir.X)*12
+                            e.arrow.Visible=true
+                            e.arrow.PointA=tip; e.arrow.PointB=tip-dir*20+perp; e.arrow.PointC=tip-dir*20-perp; e.arrow.Color=col
+                        else e.arrow.Visible=false end
+                    else e.arrow.Visible=false end
+                else hide_all(e) end
+            else
+                e.box.Visible=false; e.fill.Visible=false; for i=1,8 do e.corners[i].Visible=false end
+                e.name.Visible=false; e.wep.Visible=false; e.hpbg.Visible=false; e.hp.Visible=false; e.hptxt.Visible=false; e.dist.Visible=false; e.tracer.Visible=false; e.headDot.Visible=false; e.headCir.Visible=false; e.arrow.Visible=false
+                for i=1,#SKEL_PAIRS do e.bones[i].Visible=false end
             end
+            if showCham then safe(function() e.hl.Enabled=true; e.hl.Adornee=char; e.hl.FillColor=col; if T.ChamsVisCheck and los(Camera.CFrame.Position,head) then e.hl.FillColor=O.ChamsVisColor end; e.hl.FillTransparency=O.ChamsFill end)
+            else safe(function() e.hl.Enabled=false; e.hl.Adornee=nil end) end
         end
-    end)
-end))
-
-bin(UserInputService.JumpRequest:Connect(function()
-    if S.character.infj then
-        local h = getHum() if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
-    end
-end))
-
--- ============================================================================
--- MOVEMENT
--- ============================================================================
-local flyBV, flyBG
-local function destroyFly()
-    if flyBV then flyBV:Destroy() flyBV=nil end
-    if flyBG then flyBG:Destroy() flyBG=nil end
-end
-LocalPlayer.CharacterAdded:Connect(destroyFly)
-
-bin(RunService.Heartbeat:Connect(function()
-    pcall(function()
-        if S.movement.fly_e then
-            local hrp = getHRP() if not hrp then return end
-            if not flyBV or not flyBV.Parent then
-                flyBV = Instance.new("BodyVelocity") flyBV.MaxForce=Vector3.new(1e9,1e9,1e9) flyBV.Parent=hrp
-                flyBG = Instance.new("BodyGyro") flyBG.MaxTorque=Vector3.new(1e9,1e9,1e9) flyBG.P=1e5 flyBG.Parent=hrp
-            end
-            flyBG.CFrame = Camera.CFrame
-            local move = Vector3.zero
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += Camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= Camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= Camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += Camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.new(0,1,0) end
-            flyBV.Velocity = (move.Magnitude > 0 and move.Unit or Vector3.zero) * S.movement.fly_s
-        else destroyFly() end
-
-        if S.movement.noclip_e or (S.movement.fly_e and S.movement.fly_nc) then
-            local c = getChar()
-            if c then
-                for _,p in ipairs(c:GetDescendants()) do
-                    if p:IsA("BasePart") then pcall(function() p.CanCollide=false end) end
-                end
-            end
-        end
-
-        if S.movement.avoid_e then
-            local hrp = getHRP()
-            if hrp and hrp.Position.Y < S.movement.avoid_f then
-                hrp.CFrame = CFrame.new(0, S.movement.avoid_t, 0) * (hrp.CFrame - hrp.CFrame.Position)
-            end
-        end
-
-        if S.movement.slowfall_e then
-            local hrp = getHRP()
-            if hrp and hrp.AssemblyLinearVelocity.Y < -5 then
-                hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, -S.movement.slowfall_s/10, hrp.AssemblyLinearVelocity.Z)
-            end
-        end
-    end)
-end))
-
-local function pickMovementTarget(method)
-    local best, bestVal = nil, math.huge
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and alive(plr)
-           and (not S.movement.tp_team or not isTeammate(plr)) then
-            local hrp = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
-            local hum = plr.Character and plr.Character:FindFirstChildOfClass("Humanoid")
-            if hrp and hum then
-                local val
-                if method == "closest" then
-                    val = (hrp.Position - (getHRP() and getHRP().Position or Vector3.zero)).Magnitude
-                elseif method == "lowest_hp" then val = hum.Health
-                else val = math.random() end
-                if val < bestVal then bestVal=val best=plr end
-            end
-        end
-    end
-    return best
+    end end
 end
 
-local function doTeleport()
-    local tgt = pickMovementTarget(S.movement.tp_method)
-    if not tgt then return end
-    local hrp = getHRP() if not hrp then return end
-    local tp = tgt.Character and tgt.Character:FindFirstChild("HumanoidRootPart") if not tp then return end
-    local offset = Vector3.new(0, S.movement.tp_y, 0)
-    if S.movement.tp_pred then offset = offset + tp.AssemblyLinearVelocity * 0.15 end
-    hrp.CFrame = CFrame.new(tp.Position + offset) * (hrp.CFrame - hrp.CFrame.Position)
+-- HUD drawings
+local fov=D(Drawing.new("Circle")); fov.Thickness=1; fov.NumSides=64
+local lfov=D(Drawing.new("Circle")); lfov.Thickness=1; lfov.NumSides=64
+local tbx=D(Drawing.new("Square")); tbx.Thickness=2
+local hcb=D(Drawing.new("Square"))
+local hcf=D(Drawing.new("Square")); hcf.Filled=true
+local st_=D(Drawing.new("Text")); st_.Size=14; st_.Outline=true; st_.Font=3
+local wm=D(Drawing.new("Text")); wm.Size=16; wm.Outline=true; wm.Font=3
+local arr=D(Drawing.new("Triangle")); arr.Filled=true
+local xh={v1=D(Drawing.new("Line")),v2=D(Drawing.new("Line")),h1=D(Drawing.new("Line")),h2=D(Drawing.new("Line")),dot=D(Drawing.new("Circle"))}
+
+local function hud_tick()
+    local m=UserInputService:GetMouseLocation()
+    fov.Visible = T.VisFov and T.RageEnabled
+    if fov.Visible then fov.Position=m; fov.Radius=O.RageFov; fov.Color=O.VisFovColor; fov.Filled=T.VisFovFilled; fov.Transparency = T.VisFovFilled and 0.2 or 1 end
+    lfov.Visible = T.VisLegitFov and T.LegitOn
+    if lfov.Visible then lfov.Position=m; lfov.Radius=O.LegitFov; lfov.Color=Color3.fromRGB(255,200,0) end
+    if T.VisTargetBox and S.target and alive(S.target) then local hrp=S.target.Character.HumanoidRootPart; local s,on=w2s(hrp.Position); if on then tbx.Visible=true; tbx.Size=Vector2.new(90,140); tbx.Position=s-Vector2.new(45,70); tbx.Color = S.hitChance>70 and TH.gd or TH.wn else tbx.Visible=false end else tbx.Visible=false end
+    hcb.Visible=T.VisHcBar; hcf.Visible=T.VisHcBar
+    if T.VisHcBar then hcb.Position=Vector2.new(20,Camera.ViewportSize.Y-80); hcb.Size=Vector2.new(200,14); hcb.Color=Color3.new(1,1,1); hcf.Position=hcb.Position+Vector2.new(1,1); hcf.Size=Vector2.new((S.hitChance/100)*198,12); hcf.Color=Color3.fromRGB(math.floor(255-S.hitChance*2.55),math.floor(S.hitChance*2.55),40) end
+    st_.Visible=T.VisStats
+    if T.VisStats then st_.Position=Vector2.new(20,Camera.ViewportSize.Y-110); st_.Text=string.format("UE V6 | shots:%d hits:%d kills:%d hc:%.0f%%",S.stats.shots,S.stats.hits,S.stats.kills,S.hitChance); st_.Color=TH.ac end
+    wm.Visible=T.VisWater
+    if T.VisWater then wm.Position=Vector2.new(Camera.ViewportSize.X-310,10); wm.Text="UE V6 :: olivia :: discord.gg/ojailbreaks"; wm.Color=TH.ac end
+    arr.Visible = T.AAXArrow and (T.AAEnabled or T.AAXOn)
+    if arr.Visible then local c=Camera.ViewportSize/2; local y=S.desyncYaw or 0; arr.PointA=c+Vector2.new(math.sin(y),-math.cos(y))*50; arr.PointB=c+Vector2.new(math.sin(y+2.6),-math.cos(y+2.6))*15; arr.PointC=c+Vector2.new(math.sin(y-2.6),-math.cos(y-2.6))*15; arr.Color=TH.ac end
+    local xe=T.XhOn
+    for _,l in pairs(xh) do l.Visible=xe end
+    if xe then local c=Camera.ViewportSize/2; local sz=O.XhSize; local gp=O.XhGap; local th=O.XhThick; local col=O.XhColor; xh.v1.From=c-Vector2.new(0,gp+sz); xh.v1.To=c-Vector2.new(0,gp); xh.v1.Color=col; xh.v1.Thickness=th; xh.v2.From=c+Vector2.new(0,gp); xh.v2.To=c+Vector2.new(0,gp+sz); xh.v2.Color=col; xh.v2.Thickness=th; xh.h1.From=c-Vector2.new(gp+sz,0); xh.h1.To=c-Vector2.new(gp,0); xh.h1.Color=col; xh.h1.Thickness=th; xh.h2.From=c+Vector2.new(gp,0); xh.h2.To=c+Vector2.new(gp+sz,0); xh.h2.Color=col; xh.h2.Thickness=th; xh.dot.Position=c; xh.dot.Radius=1; xh.dot.Color=col; xh.dot.Filled=true end
 end
 
--- ============================================================================
--- WORLD
--- ============================================================================
-local function ensureEffect(name, class)
-    local e = Lighting:FindFirstChild(name)
-    if not e then e=Instance.new(class) e.Name=name e.Parent=Lighting end
-    return e
+-- status
+local function status_tick()
+    statusL.Text = string.format("ac:%s  rage:%s  aa:%s  fpos:%s  esp:%s  chams:%s  fly:%s",
+        T.AcSafe and "SAFE" or "raw",
+        T.RageEnabled and "ON" or "off",
+        (T.AAEnabled or T.AAXOn) and "ON" or "off",
+        T.FPOn and "ON" or "off",
+        T.EspOn and "ON" or "off",
+        T.ChamsOn and "ON" or "off",
+        T.Fly and "ON" or "off")
+    statusR.Text = string.format("tgt:%s  hc:%.0f%%  shots:%d",
+        S.target and S.target.Name or "—", S.hitChance, S.stats.shots)
 end
 
-bin(RunService.RenderStepped:Connect(function()
-  pcall(function()
-    if S.world.fov_e then Camera.FieldOfView = S.world.fov_v end
-
-    local atm = ensureEffect("UEV3_Atmosphere","Atmosphere")
-    atm.Enabled = S.world.atm_e
-    if S.world.atm_e then
-        atm.Density=S.world.atm_d atm.Offset=S.world.atm_o
-        atm.Color=S.world.atm_color atm.Decay=S.world.atm_decay
-        atm.Glare=S.world.atm_glare atm.Haze=S.world.atm_haze
-    end
-
-    local cc = ensureEffect("UEV3_CC","ColorCorrectionEffect")
-    cc.Enabled = S.world.cc_e
-    if S.world.cc_e then
-        cc.Brightness=S.world.cc_br cc.Contrast=S.world.cc_con
-        cc.Saturation=S.world.cc_sat cc.TintColor=S.world.cc_tint
-    end
-
-    local bl = ensureEffect("UEV3_Bloom","BloomEffect")
-    bl.Enabled = S.world.bloom_e
-    if S.world.bloom_e then bl.Intensity=S.world.bloom_i bl.Size=S.world.bloom_s bl.Threshold=S.world.bloom_t end
-
-    local blur = ensureEffect("UEV3_Blur","BlurEffect")
-    blur.Enabled = S.world.blur_e
-    if S.world.blur_e then blur.Size=S.world.blur_s end
-
-    local sr = ensureEffect("UEV3_SunRays","SunRaysEffect")
-    sr.Enabled = S.world.sunrays_e
-    if S.world.sunrays_e then sr.Intensity=S.world.sunrays_i end
-
-    local dof = ensureEffect("UEV3_DOF","DepthOfFieldEffect")
-    dof.Enabled = S.world.dof_e
-    if S.world.dof_e then dof.FocusDistance=S.world.dof_f end
-
-    if S.world.sky_e then
-        local sky = Lighting:FindFirstChild("UEV3_Sky")
-        if not sky then sky=Instance.new("Sky") sky.Name="UEV3_Sky" sky.Parent=Lighting end
-        local tbl = skyboxes[S.world.sky_preset]
-        if tbl then
-            sky.SkyboxBk="rbxassetid://"..tbl.Bk sky.SkyboxDn="rbxassetid://"..tbl.Dn
-            sky.SkyboxFt="rbxassetid://"..tbl.Ft sky.SkyboxLf="rbxassetid://"..tbl.Lf
-            sky.SkyboxRt="rbxassetid://"..tbl.Rt sky.SkyboxUp="rbxassetid://"..tbl.Up
-        end
-        sky.SunAngularSize = S.world.sky_rs and 0 or 11
-        sky.MoonAngularSize = S.world.sky_rm and 0 or 11
-        sky.StarCount = S.world.sky_rst and 0 or 3000
-    else
-        local sky = Lighting:FindFirstChild("UEV3_Sky") if sky then sky:Destroy() end
-    end
-
-    if S.world.amb_e then Lighting.Ambient = S.world.amb_color Lighting.OutdoorAmbient = S.world.amb_color end
-    if S.world.time_e then Lighting.ClockTime = S.world.time_h end
-    if S.world.fog_e then Lighting.FogEnd = 1e6 end
-  end)
+-- scheduler — gated per feature
+local tc=0
+C(RunService.Heartbeat:Connect(function()
+    tc+=1
+    -- always run hud + status (cheap)
+    safe(hud_tick); safe(status_tick)
+    if T.AcSoftTick and tc%2~=0 then return end
+    if T.AcSkipDeadTicks and not alive(LP) then return end
+    if T.RageEnabled then for _,p in ipairs(Players:GetPlayers()) do if p~=LP then safe(bt_push,p) end end; safe(self_bt_push); safe(rage_tick) end
+    if T.FPOn then safe(self_bt_push); safe(fakepos_tick) else if V6.Ghosts.g1 then killGhost("g1") killGhost("g2") end end
+    if T.AAEnabled or T.AAXOn then safe(aa_tick) end
+    if T.WsOn or T.JpOn or T.Bhop or T.Noclip or T.Fly or K.FlyKey.state then safe(move_tick) end
+    if T.NoFog or T.FullBright or T.TimeLock or T.CamFovOn or T.ThirdP then safe(world_tick) else safe(function() Camera.FieldOfView=70 end) end
+    safe(esp_tick)
 end))
 
--- ============================================================================
--- OPTIMIZATIONS
--- ============================================================================
-bin(task.spawn(function()
-    while task.wait(1) do
-        if S.optim.no_part then
-            for _,v in ipairs(Workspace:GetDescendants()) do
-                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then v.Enabled=false end
-            end
-        end
-        if S.optim.no_shad then
-            for _,v in ipairs(Workspace:GetDescendants()) do
-                if v:IsA("BasePart") then v.CastShadow=false end
-            end
-        end
-        if S.optim.no_tex then
-            for _,v in ipairs(Workspace:GetDescendants()) do
-                if v:IsA("Texture") or v:IsA("Decal") then v.Transparency=1 end
-            end
-        end
-        if S.optim.low_q then pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end) end
-        if S.optim.fps_cap_e and setfpscap then setfpscap(S.optim.fps_cap) end
-        if S.optim.no_snd then
-            for _,v in ipairs(game:GetDescendants()) do
-                if v:IsA("Sound") then v.Volume=0 end
-            end
-        end
-        if S.optim.destroy_fx then
-            for _,v in ipairs(Workspace:GetDescendants()) do
-                if v:IsA("Explosion") or v:IsA("PointLight") or v:IsA("SpotLight") then v:Destroy() end
-            end
-        end
-    end
-end))
+-- kills
+C(Players.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(function(c) local h=c:WaitForChild("Humanoid",5); if not h then return end; h.Died:Connect(function() if S.target==p then S.stats.kills+=1; S.lastKillAt=os.clock(); resolver_hit(p); if T.KillSound then local s=Instance.new("Sound"); s.SoundId="rbxassetid://"..(O.KillSoundId or "131886985"); s.Volume=O.HitVol or 0.6; s.Parent=LP:FindFirstChild("PlayerGui") or LP; s:Play(); game:GetService("Debris"):AddItem(s,3) end end end) end) end))
 
--- ============================================================================
--- GUN MODS
--- ============================================================================
-pcall(function()
-    local gm_hooked = false
-    bin(RunService.Heartbeat:Connect(function()
-        if not S.misc.gm_e then return end
-        local ok, lib = pcall(require, ReplicatedStorage.Modules.ItemLibrary)
-        if ok and lib and lib.Items then
-            for _, item in pairs(lib.Items) do
-                if type(item) == "table" then
-                    if S.misc.gm_spread then item.ShootSpread=0 item.ShootAccuracy=0 end
-                    if S.misc.gm_recoil then item.ShootRecoil=0 end
-                    if S.misc.gm_cd then
-                        item.ShootCooldown=0.001 item.ShootBurstCooldown=0.001
-                        item.AttackCooldown=0 item.SwingCooldown=0 item.MeleeCooldown=0
-                        item.Cooldown=0 item.RecoveryTime=0
-                    end
-                    if S.misc.gm_proj > 0 then item.ProjectileSpeed=S.misc.gm_proj end
-                    if S.misc.gm_os then item.Damage=999 end
-                end
-            end
-        end
-        if not gm_hooked then
-            local ok2, ci = pcall(require, LocalPlayer.PlayerScripts.Modules.ClientReplicatedClasses.ClientFighter.ClientItem)
-            if ok2 and ci and ci.Input then
-                gm_hooked = true
-                local orig = ci.Input
-                ci.Input = function(self, ...)
-                    if S.misc.gm_e and self and self.Info then
-                        self.Info.ShootRecoil=0 self.Info.ShootSpread=0
-                        self.Info.ShootCooldown=0 self.Info.QuickShotCooldown=0
-                    end
-                    return orig(self, ...)
-                end
-            end
-        end
-    end))
-end)
+pcall(function() C(LP.Idled:Connect(function() if T.AntiAfk then safe(function() VirtualInput:Button2Down(Vector2.new(),game); task.wait(1); VirtualInput:Button2Up(Vector2.new(),game) end) end end)) end)
 
--- ============================================================================
--- WATERMARK
--- ============================================================================
-local wmGui = Instance.new("ScreenGui")
-wmGui.Name="UEV3_Watermark" wmGui.ResetOnSpawn=false wmGui.IgnoreGuiInset=true
-pcall(function() wmGui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
-bin(wmGui)
+C(UserInputService.InputBegan:Connect(function(i,gpe) if gpe then return end; if K.MenuKey and typeof(K.MenuKey.k)=="EnumItem" and i.KeyCode==K.MenuKey.k then Root.Visible=not Root.Visible end end))
 
-local wmFrame = Instance.new("Frame")
-wmFrame.Size = UDim2.new(0, 280, 0, 24)
-wmFrame.Position = UDim2.new(0, 10, 0, 10)
-wmFrame.BackgroundColor3 = Color3.fromRGB(13,13,15)
-wmFrame.BorderSizePixel = 0
-wmFrame.Parent = wmGui
-Instance.new("UICorner", wmFrame).CornerRadius = UDim.new(0,4)
-local wmStroke = Instance.new("UIStroke", wmFrame) wmStroke.Color=Color3.fromRGB(196,30,58) wmStroke.Thickness=1
-local wmAccent = Instance.new("Frame")
-wmAccent.Size = UDim2.new(0, 3, 1, 0)
-wmAccent.BackgroundColor3 = Color3.fromRGB(196,30,58) wmAccent.BorderSizePixel = 0
-wmAccent.Parent = wmFrame
-local wmLabel = Instance.new("TextLabel")
-wmLabel.BackgroundTransparency = 1
-wmLabel.Size = UDim2.new(1,-10,1,0) wmLabel.Position = UDim2.new(0,8,0,0)
-wmLabel.Font = Enum.Font.Code wmLabel.TextColor3 = Color3.fromRGB(235,235,240)
-wmLabel.TextSize = 13 wmLabel.TextXAlignment = Enum.TextXAlignment.Left
-wmLabel.Parent = wmFrame
+LP.CharacterAdded:Connect(function() for _,e in pairs(V6.ESP) do hide_all(e) end end)
 
-local wmTick = 0
-local wmFpsAvg = 60
-local wmLastFrame = tick()
-bin(RunService.RenderStepped:Connect(function()
-    local now = tick()
-    local dt = now - wmLastFrame
-    wmLastFrame = now
-    if dt > 0 then wmFpsAvg = wmFpsAvg * 0.9 + (1/dt) * 0.1 end
-end))
-bin(RunService.Heartbeat:Connect(function(dt)
-    local ok, err = pcall(function()
-        wmTick = wmTick + dt
-        if wmTick < 0.25 then return end
-        wmTick = 0
-        if not S.misc.wm_e then wmGui.Enabled=false return end
-        wmGui.Enabled = true
-        local fps = math.floor(wmFpsAvg)
-        local ping = math.floor((LocalPlayer:GetNetworkPing() or 0) * 1000)
-        wmLabel.Text = string.format(" UE V3 | %d fps | %d ms | %s", fps, ping, os.date("%H:%M:%S"))
-        local positions = {
-            top_left     = UDim2.new(0, 10, 0, 10),
-            top_right    = UDim2.new(1, -290, 0, 10),
-            bottom_left  = UDim2.new(0, 10, 1, -34),
-            bottom_right = UDim2.new(1, -290, 1, -34),
-        }
-        wmFrame.Position = positions[S.misc.wm_pos] or positions.top_left
-    end)
-end))
-
--- ============================================================================
--- HIT SOUNDS
--- ============================================================================
-local function playHit()
-    if not S.misc.hs_e then return end
-    local id = S.misc.hs_custom ~= "" and ("rbxassetid://"..S.misc.hs_custom)
-               or ("rbxassetid://"..(hitSounds[S.misc.hs_id] or hitSounds.hitmarker))
-    playSound(id, S.misc.hs_v, S.misc.hs_p)
-end
-
-pcall(function()
-    for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
-        if v:IsA("RemoteEvent") then
-            local n = v.Name:lower()
-            if n:find("hit") then v.OnClientEvent:Connect(function() playHit() end) end
-        end
+-- SEARCH filtering
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local q = string.lower(searchBox.Text)
+    for n,tb in pairs(tabBtns) do
+        if q=="" then tb.btn.Visible=true
+        else tb.btn.Visible = string.find(string.lower(n), q, 1, true) ~= nil end
     end
 end)
 
--- ============================================================================
--- ANTI-AFK
--- ============================================================================
-LocalPlayer.Idled:Connect(function()
-    if not S.misc.afk then return end
-    VirtualUser:CaptureController()
-    VirtualUser:ClickButton2(Vector2.new())
-end)
-
--- ============================================================================
+------------------------------------------------------
 -- UNLOAD
--- ============================================================================
-getgenv().UEV3_UNLOAD = function()
-    for _, t in ipairs(Trash) do
-        pcall(function()
-            if typeof(t) == "RBXScriptConnection" then t:Disconnect()
-            elseif typeof(t) == "Instance" then t:Destroy()
-            elseif type(t) == "function" then t() end
-        end)
-    end
-    for plr,_ in pairs(espCache) do pcall(function() killEsp(plr) end) end
-    pcall(function() Library:Unload() end)
-    getgenv().UEV3_LOADED = nil
+------------------------------------------------------
+V6.Unload = function()
+    for _,c in ipairs(V6.Conns) do pcall(function() c:Disconnect() end) end
+    for _,d in ipairs(V6.Draws) do pcall(function() d:Remove() end) end
+    for k,_ in pairs(V6.Ghosts) do pcall(function() V6.Ghosts[k]:Destroy() end) end
+    for p,_ in pairs(V6.ESP) do esp_destroy(p) end
+    if flyBV then pcall(function() flyBV:Destroy() end) end
+    if flyBG then pcall(function() flyBG:Destroy() end) end
+    pcall(function() Lighting.FogEnd=S.origFog; Lighting.Brightness=S.origBright; Camera.FieldOfView=70 end)
+    pcall(function() Screen:Destroy() end)
+    getgenv().UEV6 = nil
 end
-
-bin(UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode[S.panic.key] then getgenv().UEV3_UNLOAD() end
-end))
-
--- ============================================================================
--- GUI BUILD — RAGE TAB
--- ============================================================================
-do
-    local g = LGroup(Tabs.Rage, "Ragebot")
-    Toggle(g, "rb_e",     "Enabled",       false, function(v) S.ragebot.enable=v end)
-    Toggle(g, "rb_shoot", "Auto Shoot",    true,  function(v) S.ragebot.autoshoot=v end)
-    Toggle(g, "rb_scope", "Auto Scope",    true,  function(v) S.ragebot.autoscope=v end)
-    Toggle(g, "rb_pred",  "Prediction",    true,  function(v) S.ragebot.prediction=v end)
-    Toggle(g, "rb_team",  "Team Check",    true,  function(v) S.ragebot.team_check=v end)
-    Toggle(g, "rb_body",  "Force Body",    false, function(v) S.ragebot.force_body=v end)
-    Slider(g, "rb_hc",    "Hitchance",     70, 0, 100, 0, function(v) S.ragebot.hitchance=v end)
-    Slider(g, "rb_tp",    "TP Duration",   0.15, 0, 1, 2, function(v) S.ragebot.tp_duration=v end)
-    Slider(g, "rb_y",     "Y Offset",      3, -10, 10, 1, function(v) S.ragebot.y_offset=v end)
-    Slider(g, "rb_range", "Max Range",     2000, 100, 5000, 0, function(v) S.ragebot.max_range=v end)
-    Dropdown(g, "rb_prio","Priority", {"distance","lowest_hp"}, "distance", function(v) S.ragebot.priority=v end)
-end
-
-do
-    local g = RGroup(Tabs.Rage, "Anti-Aim")
-    Toggle(g, "aa_e",     "Enabled", false, function(v) S.anti_aim.enable=v end)
-    Dropdown(g, "aa_p",   "Pitch", {"Off","Up","Down","Zero"}, "Down", function(v) S.anti_aim.pitch=v end)
-    Dropdown(g, "aa_y",   "Yaw",   {"Off","Spin","Jitter","Backward","Random"}, "Spin", function(v) S.anti_aim.yaw=v end)
-    Slider(g, "aa_speed", "Yaw Speed", 6, 1, 60, 0, function(v) S.anti_aim.yaw_speed=v end)
-end
-
-do
-    local g = LGroup(Tabs.Rage, "Silent Aim")
-    Toggle(g, "sa_e",    "Enabled", false, function(v) S.silent.enable=v end)
-    Toggle(g, "sa_fov",  "Show FOV", true, function(v) S.silent.show_fov=v end)
-    Slider(g, "sa_fov_r","FOV Radius", 300, 20, 800, 0, function(v) S.silent.fov=v end)
-    Slider(g, "sa_hc",   "Hit Chance", 70, 0, 100, 0, function(v) S.silent.hitchance=v end)
-    Dropdown(g, "sa_part","Hit Part", {"Head","Torso","HumanoidRootPart","UpperTorso"}, "Head", function(v) S.silent.hit_part=v end)
-    Toggle(g, "sa_team", "Team Check", true, function(v) S.silent.team_check=v end)
-    ColorPicker(g, "sa_c", "FOV Color", Color3.fromRGB(255,255,255), function(v) S.silent.fov_color=v end)
-end
-
--- ============================================================================
--- GUI BUILD — LEGIT TAB
--- ============================================================================
-do
-    local g = LGroup(Tabs.Legit, "Aimbot")
-    Toggle(g, "aim_e",    "Enabled", false, function(v) S.aimbot.enable=v end)
-    KeyPicker(g, "aimbot_key", "Aim Key", "MouseButton2", "Hold")
-    Toggle(g, "aim_fov",  "Show FOV", true, function(v) S.aimbot.show_fov=v end)
-    Slider(g, "aim_fov_r","FOV Radius", 180, 10, 600, 0, function(v) S.aimbot.fov=v end)
-    Slider(g, "aim_sm",   "Smoothing", 3, 1, 100, 0, function(v) S.aimbot.smoothing=v end)
-    Slider(g, "aim_pred", "Prediction", 0.165, 0, 0.5, 3, function(v) S.aimbot.prediction=v end)
-    Slider(g, "aim_dist", "Max Distance", 1500, 100, 5000, 0, function(v) S.aimbot.max_dist=v end)
-    Dropdown(g, "aim_part","Hit Part", {"Head","Torso","HumanoidRootPart","UpperTorso"}, "Head", function(v) S.aimbot.hit_part=v end)
-    Toggle(g, "aim_vis",  "Visible Only", false, function(v) S.aimbot.visible_only=v end)
-    Toggle(g, "aim_team", "Team Check", true, function(v) S.aimbot.team_check=v end)
-    Toggle(g, "aim_snap", "Snapline", false, function(v) S.aimbot.snapline=v end)
-    Toggle(g, "aim_snd",  "Lock Sound", false, function(v) S.aimbot.lock_sound=v end)
-    ColorPicker(g, "aim_c", "FOV Color", Color3.fromRGB(196,30,58), function(v) S.aimbot.fov_color=v end)
-    ColorPicker(g, "aim_sc", "Snap Color", Color3.fromRGB(255,255,255), function(v) S.aimbot.snapline_color=v end)
-end
-
-do
-    local g = RGroup(Tabs.Legit, "Triggerbot")
-    Toggle(g, "tb_e",    "Enabled", false, function(v) S.triggerbot.enable=v end)
-    Toggle(g, "tb_team", "Team Check", true, function(v) S.triggerbot.team_check=v end)
-    Toggle(g, "tb_head", "Headshot Only", false, function(v) S.triggerbot.headshot_only=v end)
-    Toggle(g, "tb_burst","Burst Fire", false, function(v) S.triggerbot.burst=v end)
-    Slider(g, "tb_react","Reaction", 0.05, 0, 0.5, 3, function(v) S.triggerbot.reaction=v end)
-    Slider(g, "tb_delay","Fire Delay", 0.1, 0, 1, 3, function(v) S.triggerbot.delay=v end)
-    Slider(g, "tb_dist", "Max Distance", 600, 50, 2500, 0, function(v) S.triggerbot.max_dist=v end)
-end
-
-do
-    local g = LGroup(Tabs.Legit, "Crosshair")
-    Toggle(g, "xh_e",    "Enabled", false, function(v) S.crosshair.enable=v end)
-    Slider(g, "xh_len",  "Length", 6, 1, 40, 0, function(v) S.crosshair.length=v end)
-    Slider(g, "xh_gap",  "Gap", 3, 0, 30, 0, function(v) S.crosshair.gap=v end)
-    Slider(g, "xh_th",   "Thickness", 1, 1, 6, 0, function(v) S.crosshair.thickness=v end)
-    Toggle(g, "xh_dot",  "Dot", false, function(v) S.crosshair.dot=v end)
-    Toggle(g, "xh_circ", "Circle", false, function(v) S.crosshair.circle=v end)
-    Slider(g, "xh_cr",   "Circle Radius", 14, 4, 60, 0, function(v) S.crosshair.circle_radius=v end)
-    Toggle(g, "xh_pulse","Pulse", false, function(v) S.crosshair.pulse=v end)
-    Toggle(g, "xh_rb",   "Rainbow", false, function(v) S.crosshair.rainbow=v end)
-    ColorPicker(g, "xh_c", "Color", Color3.fromRGB(0,255,170), function(v) S.crosshair.color=v end)
-    ColorPicker(g, "xh_dc", "Dot Color", Color3.fromRGB(255,255,255), function(v) S.crosshair.dot_color=v end)
-end
-
--- ============================================================================
--- GUI BUILD — VISUALS TAB
--- ============================================================================
-do
-    local g = LGroup(Tabs.Visuals, "ESP Core")
-    Toggle(g, "esp_e",      "Enabled", false, function(v) S.esp.enable=v end)
-    Toggle(g, "esp_team",   "Team Check", true, function(v) S.esp.team_check=v end)
-    Slider(g, "esp_dist",   "Max Distance", 1000, 50, 5000, 0, function(v) S.esp.max_dist=v end)
-    Toggle(g, "esp_box",    "Box", true, function(v) S.esp.box_e=v end)
-    Toggle(g, "esp_box_o",  "Box Outline", true, function(v) S.esp.box_outline=v end)
-    Toggle(g, "esp_name",   "Name", true, function(v) S.esp.name_e=v end)
-    Toggle(g, "esp_name_d", "Use DisplayName", true, function(v) S.esp.name_display=v end)
-    Toggle(g, "esp_hp",     "Health Text", true, function(v) S.esp.hp_e=v end)
-    Toggle(g, "esp_hpbar",  "HP Bar", true, function(v) S.esp.hp_bar=v end)
-    Toggle(g, "esp_hpgrad", "HP Gradient", true, function(v) S.esp.hp_grad=v end)
-    Toggle(g, "esp_dists",  "Distance", true, function(v) S.esp.dist_e=v end)
-    Toggle(g, "esp_wep",    "Weapon", false, function(v) S.esp.wep_e=v end)
-    Toggle(g, "esp_dot",    "Head Dot", false, function(v) S.esp.dot_e=v end)
-    Toggle(g, "esp_skel",   "Skeleton", false, function(v) S.esp.skel_e=v end)
-    ColorPicker(g, "esp_box_c", "Box Color", Color3.fromRGB(196,30,58), function(v) S.esp.box_color=v end)
-    ColorPicker(g, "esp_name_c", "Name Color", Color3.fromRGB(255,255,255), function(v) S.esp.name_color=v end)
-    ColorPicker(g, "esp_hp_c", "HP Color", Color3.fromRGB(80,220,80), function(v) S.esp.hp_color=v end)
-end
-
-do
-    local g = RGroup(Tabs.Visuals, "Tracers / Chams / Arrow")
-    Toggle(g, "esp_tr",   "Tracer", false, function(v) S.esp.tracer_e=v end)
-    Dropdown(g, "esp_tro","Tracer Origin", {"bottom","middle","top"}, "bottom", function(v) S.esp.tracer_origin=v end)
-    ColorPicker(g, "esp_tr_c", "Tracer Color", Color3.fromRGB(196,30,58), function(v) S.esp.tracer_color=v end)
-    Toggle(g, "esp_hl",   "Highlight", true, function(v) S.esp.hl_e=v end)
-    Slider(g, "esp_hl_t", "Highlight Transparency", 0.5, 0, 1, 2, function(v) S.esp.hl_fill_t=v end)
-    ColorPicker(g, "esp_hl_c", "Highlight Fill", Color3.fromRGB(196,30,58), function(v) S.esp.hl_fill=v end)
-    ColorPicker(g, "esp_hl_o", "Highlight Outline", Color3.fromRGB(255,255,255), function(v) S.esp.hl_outline=v end)
-    Toggle(g, "esp_ch",   "Chams", false, function(v) S.esp.chams_e=v end)
-    Dropdown(g, "esp_ch_m", "Chams Material", {"Neon","ForceField","Glass","Metal","Ice","Plastic"}, "ForceField", function(v) S.esp.chams_mat=v end)
-    Slider(g, "esp_ch_t", "Chams Transparency", 0, 0, 1, 2, function(v) S.esp.chams_t=v end)
-    ColorPicker(g, "esp_ch_c", "Chams Color", Color3.fromRGB(196,30,58), function(v) S.esp.chams_color=v end)
-    Toggle(g, "esp_arr",  "Offscreen Arrow", false, function(v) S.esp.arrow_e=v end)
-    Slider(g, "esp_arr_r","Arrow Radius", 200, 80, 400, 0, function(v) S.esp.arrow_radius=v end)
-    ColorPicker(g, "esp_arr_c", "Arrow Color", Color3.fromRGB(196,30,58), function(v) S.esp.arrow_color=v end)
-end
-
--- ============================================================================
--- GUI BUILD — WORLD TAB
--- ============================================================================
-do
-    local g = LGroup(Tabs.World, "Camera / Lighting")
-    Toggle(g, "fov_e",  "FOV Changer", false, function(v) S.world.fov_e=v end)
-    Slider(g, "fov_v",  "FOV", 90, 20, 120, 0, function(v) S.world.fov_v=v end)
-    Toggle(g, "fog_e",  "Remove Fog", false, function(v) S.world.fog_e=v end)
-    Toggle(g, "time_e", "Lock Time", false, function(v) S.world.time_e=v end)
-    Slider(g, "time_h", "Hour", 12, 0, 24, 1, function(v) S.world.time_h=v end)
-    Toggle(g, "amb_e",  "Ambient Override", false, function(v) S.world.amb_e=v end)
-    ColorPicker(g, "amb_c", "Ambient Color", Color3.fromRGB(128,128,128), function(v) S.world.amb_color=v end)
-end
-
-do
-    local g = RGroup(Tabs.World, "Atmosphere")
-    Toggle(g, "atm_e", "Enabled", false, function(v) S.world.atm_e=v end)
-    Slider(g, "atm_d", "Density", 0.3, 0, 1, 2, function(v) S.world.atm_d=v end)
-    Slider(g, "atm_o", "Offset", 0.25, 0, 1, 2, function(v) S.world.atm_o=v end)
-    Slider(g, "atm_g", "Glare", 0.2, 0, 3, 2, function(v) S.world.atm_glare=v end)
-    Slider(g, "atm_h", "Haze", 1.5, 0, 10, 2, function(v) S.world.atm_haze=v end)
-    ColorPicker(g, "atm_c", "Color", Color3.fromRGB(180,100,100), function(v) S.world.atm_color=v end)
-    ColorPicker(g, "atm_dc", "Decay", Color3.fromRGB(80,20,20), function(v) S.world.atm_decay=v end)
-end
-
-do
-    local g = LGroup(Tabs.World, "Color Correction / Post FX")
-    Toggle(g, "cc_e",  "Color Correction", false, function(v) S.world.cc_e=v end)
-    Slider(g, "cc_br", "Brightness", 0, -1, 1, 2, function(v) S.world.cc_br=v end)
-    Slider(g, "cc_con","Contrast", 0.15, -1, 1, 2, function(v) S.world.cc_con=v end)
-    Slider(g, "cc_sat","Saturation", 0.1, -1, 1, 2, function(v) S.world.cc_sat=v end)
-    ColorPicker(g, "cc_t", "Tint", Color3.fromRGB(255,220,220), function(v) S.world.cc_tint=v end)
-    Toggle(g, "bl_e",  "Bloom", false, function(v) S.world.bloom_e=v end)
-    Slider(g, "bl_i",  "Bloom Intensity", 0.4, 0, 3, 2, function(v) S.world.bloom_i=v end)
-    Toggle(g, "blur_e","Blur", false, function(v) S.world.blur_e=v end)
-    Slider(g, "blur_s","Blur Size", 0, 0, 56, 0, function(v) S.world.blur_s=v end)
-    Toggle(g, "sr_e",  "Sun Rays", false, function(v) S.world.sunrays_e=v end)
-    Toggle(g, "dof_e", "Depth Of Field", false, function(v) S.world.dof_e=v end)
-end
-
-do
-    local g = RGroup(Tabs.World, "Skybox")
-    Toggle(g, "sky_e",   "Enabled", false, function(v) S.world.sky_e=v end)
-    Dropdown(g, "sky_s", "Preset", {"DeepSpace","NebulaBlue","Sunset","Night","Purple","Realistic"}, "DeepSpace", function(v) S.world.sky_preset=v end)
-    Toggle(g, "sky_rs",  "Remove Sun", false, function(v) S.world.sky_rs=v end)
-    Toggle(g, "sky_rm",  "Remove Moon", false, function(v) S.world.sky_rm=v end)
-    Toggle(g, "sky_rst", "Remove Stars", false, function(v) S.world.sky_rst=v end)
-end
-
--- ============================================================================
--- GUI BUILD — CHARACTER TAB
--- ============================================================================
-do
-    local g = LGroup(Tabs.Character, "Humanoid")
-    Toggle(g, "ws_e",   "Walkspeed", false, function(v) S.character.ws_e=v end)
-    Slider(g, "ws_v",   "Walkspeed Value", 20, 8, 200, 0, function(v) S.character.ws_v=v end)
-    Toggle(g, "jp_e",   "Jump Power", false, function(v) S.character.jp_e=v end)
-    Slider(g, "jp_v",   "Jump Power Value", 60, 30, 500, 0, function(v) S.character.jp_v=v end)
-    Toggle(g, "gv_e",   "Gravity", false, function(v) S.character.gv_e=v end)
-    Slider(g, "gv_v",   "Gravity Value", 196, 0, 400, 0, function(v) S.character.gv_v=v end)
-    Toggle(g, "ij_e",   "Infinite Jump", false, function(v) S.character.infj=v end)
-    Toggle(g, "bh_e",   "Auto Bhop", false, function(v) S.character.bhop=v end)
-    Toggle(g, "god_e",  "God Mode", false, function(v) S.character.god=v end)
-    Toggle(g, "heal_e", "Auto Heal", false, function(v) S.character.heal_e=v end)
-    Slider(g, "heal_r", "Heal Rate", 1, 0.1, 10, 2, function(v) S.character.heal_r=v end)
-    Toggle(g, "hip_e",  "HipHeight", false, function(v) S.character.hip_e=v end)
-    Slider(g, "hip_v",  "HipHeight Value", 2, 0, 10, 2, function(v) S.character.hip_v=v end)
-end
-
-do
-    local g = RGroup(Tabs.Character, "Hitbox Expander")
-    Toggle(g, "hb_e",   "Enabled", false, function(v) S.character.hitbox_e=v end)
-    Slider(g, "hb_s",   "Hitbox Size", 5, 1, 30, 0, function(v) S.character.hitbox_s=v end)
-    Dropdown(g, "hb_p", "Hitbox Part", {"Head","HumanoidRootPart","UpperTorso"}, "Head", function(v) S.character.hitbox_p=v end)
-end
-
--- ============================================================================
--- GUI BUILD — MOVEMENT TAB
--- ============================================================================
-do
-    local g = LGroup(Tabs.Movement, "Fly / Noclip")
-    Toggle(g, "fly_e",  "Fly", false, function(v) S.movement.fly_e=v end)
-    Slider(g, "fly_s",  "Fly Speed", 50, 10, 500, 0, function(v) S.movement.fly_s=v end)
-    Toggle(g, "fly_nc", "Fly Noclip", false, function(v) S.movement.fly_nc=v end)
-    Toggle(g, "nc_e",   "Noclip", false, function(v) S.movement.noclip_e=v end)
-end
-
-do
-    local g = RGroup(Tabs.Movement, "Teleport / Underground")
-    KeyPicker(g, "tp_key", "TP Key", "T", "Toggle")
-    Dropdown(g, "tp_m", "TP Method", {"closest","lowest_hp","random"}, "closest", function(v) S.movement.tp_method=v end)
-    Slider(g, "tp_y",   "TP Y Offset", 0, -20, 20, 1, function(v) S.movement.tp_y=v end)
-    Toggle(g, "tp_t",   "TP Team Check", true, function(v) S.movement.tp_team=v end)
-    Toggle(g, "tp_p",   "TP Prediction", true, function(v) S.movement.tp_pred=v end)
-    Toggle(g, "ug_e",   "Underground", false, function(v) S.movement.ug_e=v end)
-    Slider(g, "ug_d",   "UG Depth", 5.8, 1, 20, 1, function(v) S.movement.ug_d=v end)
-    Toggle(g, "av_e",   "Anti Void", false, function(v) S.movement.avoid_e=v end)
-    Toggle(g, "sf_e",   "Slow Fall", false, function(v) S.movement.slowfall_e=v end)
-    Slider(g, "sf_s",   "Slow Fall Strength", 100, 10, 500, 0, function(v) S.movement.slowfall_s=v end)
-end
-
-bin(task.spawn(function()
-    while task.wait(0.1) do
-        if Library.Options.tp_key and Library.Options.tp_key:GetState() then
-            doTeleport() task.wait(0.4)
-        end
-    end
-end))
-
--- ============================================================================
--- GUI BUILD — MISC TAB
--- ============================================================================
-do
-    local g = LGroup(Tabs.Misc, "Gun Mods")
-    Toggle(g, "gm_e",    "Enabled", false, function(v) S.misc.gm_e=v end)
-    Toggle(g, "gm_rec",  "No Recoil", true, function(v) S.misc.gm_recoil=v end)
-    Toggle(g, "gm_spr",  "No Spread", true, function(v) S.misc.gm_spread=v end)
-    Toggle(g, "gm_cd",   "No Cooldown", true, function(v) S.misc.gm_cd=v end)
-    Toggle(g, "gm_os",   "One Shot", false, function(v) S.misc.gm_os=v end)
-    Slider(g, "gm_proj", "Projectile Speed", 0, 0, 10000, 0, function(v) S.misc.gm_proj=v end)
-end
-
-do
-    local g = RGroup(Tabs.Misc, "Sounds / UI")
-    Toggle(g, "hs_e",    "Hit Sounds", false, function(v) S.misc.hs_e=v end)
-    Dropdown(g, "hs_id", "Hit Sound", {"hitmarker","rust","skeet","bell","minecraft","bone","ding","glass","pop","tick"}, "hitmarker", function(v) S.misc.hs_id=v end)
-    Slider(g, "hs_v",    "Volume", 1, 0, 5, 2, function(v) S.misc.hs_v=v end)
-    Slider(g, "hs_p",    "Pitch", 1, 0.5, 3, 2, function(v) S.misc.hs_p=v end)
-    Input(g, "hs_c",     "Custom Hit ID", "", function(v) S.misc.hs_custom=v end)
-    Toggle(g, "wm_e",    "Watermark", true, function(v) S.misc.wm_e=v end)
-    Dropdown(g, "wm_p",  "Watermark Position", {"top_left","top_right","bottom_left","bottom_right"}, "top_left", function(v) S.misc.wm_pos=v end)
-    Toggle(g, "afk_e",   "Anti AFK", true, function(v) S.misc.afk=v end)
-    Toggle(g, "notif",   "Notifications", true, function(v) S.misc.notif=v end)
-end
-
--- ============================================================================
--- GUI BUILD — SCRIPTS TAB
--- ============================================================================
-do
-    local g = LGroup(Tabs.Scripts, "Utility Scripts")
-    Button(g, "Infinite Yield", function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
-    end)
-    Button(g, "Dex Explorer", function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/main/dex.lua"))()
-    end)
-    Button(g, "Simple Spy", function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/exxtremestuffs/SimpleSpySource/master/SimpleSpy.lua"))()
-    end)
-    Button(g, "Hydroxide", function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/Upbolt/Hydroxide/master/main.lua"))()
-    end)
-end
-
-do
-    local g = RGroup(Tabs.Scripts, "Server / Performance")
-    Button(g, "FPS Booster", function()
-        for _,v in pairs(Workspace:GetDescendants()) do
-            if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then v.Enabled=false end
-            if v:IsA("Texture") or v:IsA("Decal") then v.Transparency=1 end
-        end
-        pcall(function() settings().Rendering.QualityLevel=1 end)
-        Lighting.GlobalShadows = false
-        notify("FPS Booster applied", 3)
-    end)
-    Button(g, "Rejoin Server", function()
-        TeleportService:Teleport(game.PlaceId, LocalPlayer)
-    end)
-    Button(g, "Server Hop", function()
-        local ok, res = pcall(function()
-            return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?limit=100"))
-        end)
-        if ok and res and res.data then
-            local servers = {}
-            for _,s in ipairs(res.data) do
-                if s.playing < s.maxPlayers and s.id ~= game.JobId then servers[#servers+1] = s.id end
-            end
-            if #servers > 0 then TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1,#servers)], LocalPlayer) end
-        end
-    end)
-end
-
--- ============================================================================
--- GUI BUILD — SPOOFER TAB
--- ============================================================================
-do
-    local g = LGroup(Tabs.Spoofer, "Account Spoof")
-    Toggle(g, "spf_n", "Spoof Name", false, function(v) S.spoofer.name_e=v end)
-    Input(g, "spf_nv", "Name Value", "", function(v) S.spoofer.name_v=v end)
-    Toggle(g, "spf_d", "Spoof Display", false, function(v) S.spoofer.display_e=v end)
-    Input(g, "spf_dv", "Display Value", "", function(v) S.spoofer.display_v=v end)
-    Toggle(g, "spf_l", "Spoof Level", false, function(v) S.spoofer.level_e=v end)
-    Slider(g, "spf_lv","Level", 9, 0, 999, 0, function(v) S.spoofer.level_v=v end)
-end
-
-do
-    local g = RGroup(Tabs.Spoofer, "Stats Spoof")
-    Toggle(g, "spf_s", "Spoof Streak", false, function(v) S.spoofer.streak_e=v end)
-    Slider(g, "spf_sv","Streak", 9, 0, 999, 0, function(v) S.spoofer.streak_v=v end)
-    Toggle(g, "spf_r", "Spoof Rank", false, function(v) S.spoofer.rank_e=v end)
-    Input(g, "spf_rv", "Rank Value", "GM", function(v) S.spoofer.rank_v=v end)
-    Toggle(g, "spf_w", "Spoof Wins", false, function(v) S.spoofer.wins_e=v end)
-    Slider(g, "spf_wv","Wins", 9999, 0, 99999, 0, function(v) S.spoofer.wins_v=v end)
-end
-
--- ============================================================================
--- GUI BUILD — OPTIMIZATIONS TAB
--- ============================================================================
-do
-    local g = LGroup(Tabs.Optim, "Performance")
-    Toggle(g, "op_part", "No Particles", false, function(v) S.optim.no_part=v end)
-    Toggle(g, "op_shad", "No Shadows", false, function(v) S.optim.no_shad=v end)
-    Toggle(g, "op_tex",  "No Textures", false, function(v) S.optim.no_tex=v end)
-    Toggle(g, "op_low",  "Low Quality", false, function(v) S.optim.low_q=v end)
-    Toggle(g, "op_snd",  "Disable Sounds", false, function(v) S.optim.no_snd=v end)
-    Toggle(g, "op_dfx",  "Destroy Map FX", false, function(v) S.optim.destroy_fx=v end)
-    Toggle(g, "op_cap_e","FPS Cap", false, function(v) S.optim.fps_cap_e=v end)
-    Slider(g, "op_cap_v","FPS Cap Value", 240, 30, 360, 0, function(v) S.optim.fps_cap=v end)
-end
-
--- ============================================================================
--- GUI BUILD — CONFIG TAB
--- ============================================================================
-do
-    local g = LGroup(Tabs.Config, "UI Settings")
-    KeyPicker(g, "menu_key", "Menu Toggle", "RightShift", "Toggle")
-    KeyPicker(g, "panic_key", "Panic Unload", "End", "Toggle")
-    Button(g, "Unload UE V3", function() getgenv().UEV3_UNLOAD() end)
-    Button(g, "Rejoin Server", function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end)
-end
-
-do
-    local g = RGroup(Tabs.Config, "Info")
-    Label(g, "Unnamed Enhancements V3")
-    Label(g, "Built by Olivia")
-    Label(g, "discord.gg/ojailbreaks")
-    Label(g, " ")
-    Label(g, "Press End to panic unload")
-end
-
--- ============================================================================
--- THEME + SAVE
--- ============================================================================
-pcall(function()
-    ThemeManager:SetLibrary(Library)
-    SaveManager:SetLibrary(Library)
-    SaveManager:IgnoreThemeSettings()
-    SaveManager:SetIgnoreIndexes({"menu_key","panic_key"})
-    ThemeManager:SetFolder("UnnamedEnhancementsV3")
-    SaveManager:SetFolder("UnnamedEnhancementsV3/Rivals")
-    SaveManager:BuildConfigSection(Tabs.Config)
-    ThemeManager:ApplyToTab(Tabs.Config)
-    SaveManager:LoadAutoloadConfig()
-end)
-
-Library:OnUnload(function()
-    getgenv().UEV3_LOADED = nil
-end)
-
-notify("Unnamed Enhancements V3  |  Rivals loaded — discord.gg/ojailbreaks", 5)
-print("[UE V3] Loaded — Built by Olivia — https://discord.gg/ojailbreaks")
