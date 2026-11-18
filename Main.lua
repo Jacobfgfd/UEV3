@@ -133,13 +133,18 @@ local function safeFontFace(fam, weight)
     if ok and f then return f end
     return nil
 end
+local function safeEnum(name, fallback)
+    local ok, v = pcall(function() return Enum.Font[name] end)
+    if ok and v then return v end
+    return fallback
+end
 local F = {
     lblFace = safeFontFace("Oxanium", Enum.FontWeight.Medium),
     capFace = safeFontFace("Oxanium", Enum.FontWeight.Bold),
     monoFace= safeFontFace("Inconsolata", Enum.FontWeight.Medium),
-    lblEnum = Enum.Font.Oxanium,
-    capEnum = Enum.Font.Oxanium,
-    monoEnum= Enum.Font.Code,
+    lblEnum = safeEnum("GothamMedium", Enum.Font.Gotham),
+    capEnum = safeEnum("GothamBold", Enum.Font.Gotham),
+    monoEnum= safeEnum("Code", Enum.Font.SourceSans),
 }
 
 local function applyFont(obj, face, en)
