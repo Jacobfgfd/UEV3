@@ -189,12 +189,61 @@ end
 local tGui = trec("gui_build")
 local Screen = N("ScreenGui",{Name="UE3",ResetOnSpawn=false,IgnoreGuiInset=true,ZIndexBehavior=Enum.ZIndexBehavior.Sibling,DisplayOrder=99})
 
+-- =========== SPLASH / LOADER OVERLAY ===========
+-- Full-screen overlay shown first; main UI builds behind it (Root hidden), then crossfade.
+local Splash = N("Frame",{
+    Size=UDim2.fromScale(1,1), Position=UDim2.new(),
+    BackgroundColor3=Color3.fromRGB(8,10,13), BorderSizePixel=0, ZIndex=500, Parent=Screen,
+})
+local SplashCenter = N("Frame",{
+    Size=UDim2.fromOffset(360,80), Position=UDim2.new(0.5,-180,0.5,-40),
+    BackgroundTransparency=1, ZIndex=501, Parent=Splash,
+})
+local SplashTxt = N("TextLabel",{
+    Size=UDim2.new(1,0,0,30), Position=UDim2.fromOffset(0,10), BackgroundTransparency=1,
+    Text="616 Is Loading", TextSize=22, TextColor3=P.tx, TextXAlignment=Enum.TextXAlignment.Center,
+    Font={face=F.capFace,en=F.capEnum}, ZIndex=501, Parent=SplashCenter,
+})
+local SplashDots = N("TextLabel",{
+    Size=UDim2.fromOffset(40,30), Position=UDim2.new(0.5,100,0,10), BackgroundTransparency=1,
+    Text="", TextSize=22, TextColor3=ac(), TextXAlignment=Enum.TextXAlignment.Left,
+    Font={face=F.capFace,en=F.capEnum}, ZIndex=501, Parent=SplashCenter,
+})
+local SplashBarBG = N("Frame",{
+    Size=UDim2.fromOffset(300,2), Position=UDim2.new(0.5,-150,0,50),
+    BackgroundColor3=P.row, BorderSizePixel=0, ZIndex=501, Parent=SplashCenter,
+})
+local SplashBar = N("Frame",{
+    Size=UDim2.fromOffset(0,2), BackgroundColor3=ac(), BorderSizePixel=0, ZIndex=502, Parent=SplashBarBG,
+})
+local SplashSub = N("TextLabel",{
+    Size=UDim2.new(1,0,0,14), Position=UDim2.fromOffset(0,60), BackgroundTransparency=1,
+    Text="built by olivia  //  discord.gg/ojailbreaks", TextSize=10, TextColor3=P.dim,
+    Font={face=F.monoFace,en=F.monoEnum}, ZIndex=501, Parent=SplashCenter,
+})
+
+-- splash drives: 3 second load, animated dots + progress bar
+local SPLASH_DURATION = 3.0
+local splashStart = os.clock()
+task.spawn(function()
+    local phases = {".", "..", "..."}
+    while Splash.Parent and (os.clock()-splashStart) < SPLASH_DURATION do
+        local el = os.clock()-splashStart
+        SplashDots.Text = phases[((math.floor(el*3)) % 3) + 1]
+        SplashBar.Size = UDim2.fromOffset(300 * math.min(el/SPLASH_DURATION,1), 2)
+        task.wait(0.08)
+    end
+    SplashDots.Text = "..."
+    SplashBar.Size = UDim2.fromOffset(300, 2)
+end)
+
 local Root = N("Frame",{
     Size=UDim2.fromOffset(620,420),
     Position=UDim2.fromOffset(60,120),
     BackgroundColor3=P.panel,
     BorderSizePixel=0,
     Active=true,
+    Visible=false,  -- hidden until splash finishes
     Parent=Screen,
 })
 N("UICorner",{CornerRadius=UDim.new(0,2),Parent=Root})
@@ -895,7 +944,25 @@ end)
 if #Tabs == 0 then warn("[UE3] no tabs registered — menu will be blank") end
 for i,t in ipairs(Tabs) do makeRailButton(t,i) end
 -- Show the first tab RIGHT NOW so the pane is never empty regardless of deferred load.
-if Tabs[1] then pcall(ShowTab, Tabs[1]) end
+-- First tab builds during the splash window (behind the overlay), then revealed.
+task.delay(SPLASH_DURATION * 0.4, function()
+    if Tabs[1] then pcall(ShowTab, Tabs[1]) end
+end)
+-- Splash fade-out + Root fade-in once the load window ends.
+task.delay(SPLASH_DURATION, function()
+    Root.Visible = true
+    -- fade Root in from transparent
+    Root.BackgroundTransparency = 1
+    TweenService:Create(Root, TweenInfo.new(0.25), {BackgroundTransparency=0}):Play()
+    -- fade splash out
+    TweenService:Create(Splash, TweenInfo.new(0.35), {BackgroundTransparency=1}):Play()
+    TweenService:Create(SplashTxt, TweenInfo.new(0.35), {TextTransparency=1}):Play()
+    TweenService:Create(SplashDots, TweenInfo.new(0.35), {TextTransparency=1}):Play()
+    TweenService:Create(SplashSub, TweenInfo.new(0.35), {TextTransparency=1}):Play()
+    TweenService:Create(SplashBarBG, TweenInfo.new(0.35), {BackgroundTransparency=1}):Play()
+    TweenService:Create(SplashBar, TweenInfo.new(0.35), {BackgroundTransparency=1}):Play()
+    task.delay(0.4, function() if Splash then Splash:Destroy() end end)
+end)
 warn(("[UE3] %d tabs built, rail wired, first tab = %s"):format(#Tabs, Tabs[1] and Tabs[1].name or "nil"))
 
 -- tab cycle key
@@ -1119,9 +1186,8 @@ local function learnSig(sig, args, n, origin)
     return known
 end
 
--- STAGGERED HOOK INSTALL: wrap the metatable + Mouse.Hit a full second after load
--- so the initial loadstring / compile frame doesn't also pay for a metatable swap.
-task.delay(1.0, function()
+-- STAGGERED HOOK INSTALL: metatable + Mouse.Hit come online after the splash ends.
+task.delay(SPLASH_DURATION, function()
 local mt = getrawmetatable and getrawmetatable(game)
 if mt and setreadonly then
     pc(setreadonly, mt, false)
@@ -1743,9 +1809,8 @@ local function schedulerTick()
     U._lastTickMs = (os.clock() - t0) * 1000
 end
 
--- Staggered scheduler start: don't connect the per-frame tick for 1.5s so the loading
--- game-chunk has headroom to settle before we start ticking features.
-task.delay(1.5, function()
+-- Staggered scheduler start: aligns with splash end so the load frame stays quiet.
+task.delay(SPLASH_DURATION + 0.2, function()
     C(RunService.Heartbeat:Connect(schedulerTick))
     warn("[UE3] scheduler online")
 end)
