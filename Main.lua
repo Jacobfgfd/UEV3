@@ -90,8 +90,26 @@ local function rebuildCharCache(ch)
     U.Char = {ch=ch, hrp=ch and ch:FindFirstChild("HumanoidRootPart"), hum=ch and ch:FindFirstChildOfClass("Humanoid"), head=ch and ch:FindFirstChild("Head")}
 end
 rebuildCharCache(LP.Character)
-local function wireDied(ch) pcall(function() C(ch:WaitForChild("Humanoid").Died:Connect(clearCharCache)) end) end
-C(LP.CharacterAdded:Connect(function(ch) rebuildCharCache(ch); wireDied(ch) end))
+local function resetOnRespawn()
+    -- reset feature state so a death doesn't leave stale anchors / dead pcw flags
+    if U._pcwState then for _,v in pairs(U._pcwState) do v.dead=false; v.fails=0 end end
+    if voidCamAnchor then pcall(function() voidCamAnchor:Destroy() end); voidCamAnchor=nil end
+    if fpCamAnchor then pcall(function() fpCamAnchor:Destroy() end); fpCamAnchor=nil end
+    fpSurfacePos = nil; voidShootUntil = 0; fpShootUntil = 0
+    if DF then DF.handoffUntil = 0 end
+    U._strafeRestoreAt = 0
+end
+local function wireDied(ch)
+    pcall(function()
+        local hum = ch:WaitForChild("Humanoid", 5)
+        if hum then C(hum.Died:Connect(clearCharCache)) end
+    end)
+end
+C(LP.CharacterAdded:Connect(function(ch)
+    rebuildCharCache(ch); wireDied(ch); resetOnRespawn()
+    -- re-ensure cache populated after parts replicate
+    task.delay(0.2, function() if ch and ch.Parent then rebuildCharCache(ch) end end)
+end))
 if LP.Character then wireDied(LP.Character) end
 
 local function alive(p)
@@ -372,6 +390,29 @@ local function Slider(parent,k,label,def,lo,hi,step,sfx,tabName)
     return r
 end
 
+-- single shared dropdown popup, parented to Screen so it floats above everything
+local DDPopup = N("Frame",{Size=UDim2.fromOffset(120,0),BackgroundColor3=P.row,BorderSizePixel=0,
+    Visible=false,ZIndex=200,Parent=Screen})
+N("UIStroke",{Color=P.line,Thickness=1,Parent=DDPopup})
+local DDOpenFor = nil
+
+local function closeDDPopup()
+    DDPopup.Visible = false
+    DDOpenFor = nil
+    for _,c in ipairs(DDPopup:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+end
+
+-- close popup when clicking outside
+C(UIS.InputBegan:Connect(function(i)
+    if i.UserInputType ~= Enum.UserInputType.MouseButton1 and i.UserInputType ~= Enum.UserInputType.Touch then return end
+    if not DDPopup.Visible then return end
+    local mp = UIS:GetMouseLocation()
+    local pop = DDPopup.AbsolutePosition; local sz = DDPopup.AbsoluteSize
+    if mp.X < pop.X or mp.X > pop.X+sz.X or mp.Y < pop.Y-20 or mp.Y > pop.Y+sz.Y then
+        task.defer(closeDDPopup)
+    end
+end))
+
 local function Dropdown(parent,k,label,items,def,tabName)
     O[k] = O[k]==nil and def or O[k]
     local r = addRow(label, parent, tabName); labelLeft(r,label)
@@ -379,27 +420,26 @@ local function Dropdown(parent,k,label,items,def,tabName)
         Text=O[k],TextSize=10,TextColor3=P.tx,AutoButtonColor=false,TextXAlignment=Enum.TextXAlignment.Right,
         Font={face=F.monoFace,en=F.monoEnum},Parent=r})
     N("UIPadding",{PaddingRight=UDim.new(0,6),Parent=btn})
-    local list = N("Frame",{Size=UDim2.fromOffset(120,0),Position=UDim2.new(1,-128,0.5,8),BackgroundColor3=P.row,BorderSizePixel=0,Visible=false,ZIndex=50,Parent=r})
-    local open = false
     btn.MouseButton1Click:Connect(function()
-        open = not open
-        if open then
-            list.Visible = true
-            list.Size = UDim2.fromOffset(120, 16*#items)
-        else list.Visible = false end
+        if DDOpenFor == btn then closeDDPopup(); return end
+        closeDDPopup()
+        DDOpenFor = btn
+        local ap = btn.AbsolutePosition; local sz = btn.AbsoluteSize
+        DDPopup.Position = UDim2.fromOffset(ap.X, ap.Y + sz.Y)
+        DDPopup.Size = UDim2.fromOffset(sz.X, 16*#items)
+        for i,v in ipairs(items) do
+            local it = N("TextButton",{Size=UDim2.new(1,0,0,16),Position=UDim2.fromOffset(0,(i-1)*16),BackgroundColor3=P.row,BorderSizePixel=0,
+                Text=v,TextSize=10,TextColor3=P.tx,AutoButtonColor=false,TextXAlignment=Enum.TextXAlignment.Right,ZIndex=201,
+                Font={face=F.monoFace,en=F.monoEnum},Parent=DDPopup})
+            N("UIPadding",{PaddingRight=UDim.new(0,6),Parent=it})
+            it.MouseEnter:Connect(function() it.BackgroundColor3=P.hover end)
+            it.MouseLeave:Connect(function() it.BackgroundColor3=P.row end)
+            it.MouseButton1Click:Connect(function()
+                O[k]=v; btn.Text=v; closeDDPopup(); U._activeDirty=true
+            end)
+        end
+        DDPopup.Visible = true
     end)
-    for i,v in ipairs(items) do
-        local it = N("TextButton",{Size=UDim2.new(1,0,0,16),Position=UDim2.fromOffset(0,(i-1)*16),BackgroundColor3=P.row,BorderSizePixel=0,
-            Text=v,TextSize=10,TextColor3=P.tx,AutoButtonColor=false,TextXAlignment=Enum.TextXAlignment.Right,ZIndex=51,
-            Font={face=F.monoFace,en=F.monoEnum},Parent=list})
-        N("UIPadding",{PaddingRight=UDim.new(0,6),Parent=it})
-        it.MouseEnter:Connect(function() it.BackgroundColor3=P.hover end)
-        it.MouseLeave:Connect(function() it.BackgroundColor3=P.row end)
-        it.MouseButton1Click:Connect(function()
-            O[k]=v; btn.Text=v; open=false; list.Visible=false
-            U._activeDirty=true
-        end)
-    end
     return r
 end
 
@@ -557,28 +597,56 @@ registerTab("rage", "R", function(p)
     Toggle(p,"Silent","silent aim",false,"rage")
     Toggle(p,"MouseHit","mouse.hit hook (detectable)",false,"rage")
     Toggle(p,"AutoFire","auto fire",false,"rage")
+    Toggle(p,"AutoScope","auto scope",false,"rage")
+    Toggle(p,"AutoShoot","trigger on target in cone",false,"rage")
+    Toggle(p,"AutoStop","stop walking on fire",false,"rage")
     Slider(p,"FireRate","fire rate",8,1,25,1,"hz","rage")
     Slider(p,"Fov","fov",150,20,800,10,"","rage")
     Slider(p,"MaxDist","max distance",600,50,3000,10,"s","rage")
+    Toggle(p,"FovVis","draw fov circle",false,"rage")
     Keybind(p,"RageKey","rage key",Enum.KeyCode.E,"rage")
     Dropdown(p,"KeyMode","key mode",{"Hold","Toggle","Always"},"Hold","rage")
-    Dropdown(p,"Prio","priority",{"ClosestToCrosshair","ClosestToPlayer","LowestHP","Distance","Random"},"ClosestToCrosshair","rage")
+
+    PaneHeader(p, "target selection")
+    Dropdown(p,"Prio","priority",{"ClosestToCrosshair","ClosestToPlayer","LowestHP","Distance","Random","HighestThreat"},"ClosestToCrosshair","rage")
     Toggle(p,"IgnTeam","ignore teammates",true,"rage")
+    Toggle(p,"IgnFriends","ignore friends",false,"rage")
+    Toggle(p,"IgnLowHP","ignore <10 hp",false,"rage")
+    Toggle(p,"IgnInvis","ignore invisible",true,"rage")
+    Toggle(p,"IgnWalls","require line of sight",false,"rage")
     Toggle(p,"LockTgt","lock target until dead",false,"rage")
+    Slider(p,"SwitchDly","target switch delay",0,0,1,0.01,"s","rage")
 
     PaneHeader(p, "hitbox")
-    Dropdown(p,"HB","hitbox",{"Head","UpperTorso","Torso","HumanoidRootPart"},"Head","rage")
+    Dropdown(p,"HB","hitbox",{"Head","UpperTorso","Torso","HumanoidRootPart","LowerTorso","RightHand","LeftHand","Multipoint"},"Head","rage")
     Toggle(p,"ForceHS","force head",false,"rage")
+    Toggle(p,"ForceBaim","force body-aim",false,"rage")
+    Toggle(p,"HBExpand","hitbox expander",false,"rage")
+    Slider(p,"HBSize","hitbox size",5,1,30,0.5,"s","rage")
+    Toggle(p,"MultiPoint","multipoint scan",false,"rage")
+    Slider(p,"MPCount","multipoint samples",3,2,8,1,"","rage")
 
     PaneHeader(p, "validation")
     Slider(p,"ConeDeg","cone angle",8,1,45,1,"°","rage")
     Dropdown(p,"ConeMode","beyond cone",{"Clamp","Abort","Raw"},"Clamp","rage")
     Slider(p,"HandoffMs","handoff window",60,20,300,5,"ms","rage")
     Toggle(p,"HandoffPing","scale by full ping",false,"rage")
+    Slider(p,"HcMin","min hitchance",70,0,100,1,"%","rage")
+    Slider(p,"HcSmp","hc samples",6,2,16,1,"","rage")
     Toggle(p,"PredOn","velocity lead",false,"rage")
     Slider(p,"PredF","lead factor",0.14,0,0.5,0.01,"s","rage")
+    Toggle(p,"GravityComp","gravity compensation",false,"rage")
+    Slider(p,"GravFactor","gravity factor",0.5,0,2,0.05,"","rage")
     Toggle(p,"BTOn","backtrack",false,"rage")
     Slider(p,"BTMs","backtrack ms",200,0,500,10,"ms","rage")
+
+    PaneHeader(p, "resolver")
+    Toggle(p,"ResolverOn","enable resolver",false,"rage")
+    Dropdown(p,"ResolverMode","mode",{"Static","BruteForce","YawCorrect","Adaptive"},"Adaptive","rage")
+    Slider(p,"ResolverStr","correction strength",50,0,100,1,"%","rage")
+    Toggle(p,"AntiJitter","defeat jitter",true,"rage")
+    Toggle(p,"AntiSpin","defeat spin",true,"rage")
+    Toggle(p,"AntiDesync","desync breaker",false,"rage")
 
     PaneHeader(p, "observe / replay")
     Toggle(p,"ObserveOnly","observe mode (log remotes, no swap)",false,"rage")
@@ -601,68 +669,186 @@ registerTab("rage", "R", function(p)
 end)
 
 registerTab("anti-aim", "A", function(p)
-    PaneHeader(p, "base")
+    PaneHeader(p, "master")
     Toggle(p,"AAOn","enable anti-aim",false,"anti-aim")
-    Dropdown(p,"AABase","base",{"Backwards","AtTarget","Freestand","Jitter","Spin","Zero"},"AtTarget","anti-aim")
-    Slider(p,"AADesync","desync",58,0,60,1,"°","anti-aim")
-    Keybind(p,"AAInvert","invert",Enum.KeyCode.X,"anti-aim")
+    Toggle(p,"AAStand","stand anti-aim",true,"anti-aim")
+    Toggle(p,"AAMove","move anti-aim",true,"anti-aim")
+    Toggle(p,"AAAir","air anti-aim",true,"anti-aim")
+    Toggle(p,"AACrouch","crouch anti-aim",true,"anti-aim")
+    Keybind(p,"AAInvert","invert direction",Enum.KeyCode.X,"anti-aim")
+    Keybind(p,"AADisable","disable (hold)",Enum.KeyCode.F,"anti-aim")
+
+    PaneHeader(p, "yaw base")
+    Dropdown(p,"AABase","base",{"Backwards","AtTarget","Freestand","Jitter","Spin","Random","Zero","Sideways"},"AtTarget","anti-aim")
+    Slider(p,"AADesync","desync angle",58,0,60,1,"°","anti-aim")
+    Slider(p,"AAYawAdd","yaw add",0,-180,180,1,"°","anti-aim")
+    Slider(p,"AAJitterR","jitter range",45,0,180,1,"°","anti-aim")
+    Slider(p,"AASpinSpd","spin speed",6,0.1,30,0.1,"rad/s","anti-aim")
+    Toggle(p,"AAEdge","edge yaw (map aware)",false,"anti-aim")
+
     PaneHeader(p, "pitch")
-    Toggle(p,"AAPOn","pitch",false,"anti-aim")
-    Dropdown(p,"AAPitch","pitch mode",{"Down","Up","Zero","Jitter"},"Down","anti-aim")
-    PaneHeader(p, "extras")
+    Toggle(p,"AAPOn","enable pitch",false,"anti-aim")
+    Dropdown(p,"AAPitch","pitch mode",{"Down","Up","Zero","Jitter","Random","Fake"},"Down","anti-aim")
+    Slider(p,"AAPitchR","pitch random range",89,0,89,1,"°","anti-aim")
+
+    PaneHeader(p, "desync / lby")
+    Toggle(p,"LBYBreak","lby breaker",false,"anti-aim")
+    Dropdown(p,"LBYMode","lby mode",{"Static","Flicker","Opposite","Delayed"},"Flicker","anti-aim")
+    Slider(p,"LBYMs","lby interval",250,50,1000,10,"ms","anti-aim")
+    Toggle(p,"FakeLag","fake lag",false,"anti-aim")
+    Slider(p,"FakeLagTicks","fake lag ticks",2,1,14,1,"","anti-aim")
+    Toggle(p,"Desync","desync torso",false,"anti-aim")
+    Slider(p,"DesyncAmt","desync amount",45,0,90,1,"°","anti-aim")
+
+    PaneHeader(p, "on-shot")
     Toggle(p,"OnShot","on-shot flip",false,"anti-aim")
-    Slider(p,"OnShotMs","on-shot ms",220,50,500,10,"ms","anti-aim")
+    Dropdown(p,"OnShotMode","on-shot mode",{"Flip","Jitter","Random","OppositeYaw"},"Flip","anti-aim")
+    Slider(p,"OnShotMs","on-shot duration",220,50,500,10,"ms","anti-aim")
+
+    PaneHeader(p, "freestand / safety")
+    Toggle(p,"Freestand","auto-freestand",false,"anti-aim")
+    Slider(p,"FreestandRays","freestand rays",8,4,24,2,"","anti-aim")
+    Toggle(p,"SafePoint","safe point only",false,"anti-aim")
+    Toggle(p,"AntiBaim","anti body-aim",false,"anti-aim")
+    Toggle(p,"AntiBT","anti backtrack",false,"anti-aim")
+    Toggle(p,"AARoll","roll (visual confuse)",false,"anti-aim")
+    Slider(p,"AARollDeg","roll amount",0,-180,180,1,"°","anti-aim")
 end)
 
 registerTab("field", "F", function(p)
     PaneHeader(p, "displacement field")
     Toggle(p,"DFOn","enable field",false,"field")
-    Dropdown(p,"DFPreset","shape",{"None","Flat","Lissajous","Coil","Chaos"},"Lissajous","field")
+    Dropdown(p,"DFPreset","shape",{"None","Flat","Lissajous","Coil","Chaos","Orbit","Dive","Zigzag"},"Lissajous","field")
     Slider(p,"DFAmp","amplitude",15,2,80,1,"s","field")
-    Slider(p,"DFHorizMax","horiz clamp",4,0,10,0.5,"s","field")
+    Slider(p,"DFHorizMax","horizontal clamp",4,0,10,0.5,"s","field")
+    Slider(p,"DFFreq","base frequency",1,0.1,4,0.1,"hz","field")
+    Dropdown(p,"DFRate","write rate",{"Slow","Normal","Fast","Burst"},"Normal","field")
     Toggle(p,"DFEscalate","escalate on repeat hits",true,"field")
+    Slider(p,"DFEscMult","escalation multiplier",1.5,1,3,0.1,"x","field")
     Toggle(p,"DFPerLife","per-life seed reroll",true,"field")
-    PaneHeader(p, "voidspam (legacy)")
+    Toggle(p,"DFCamLock","lock camera to real pos",true,"field")
+
+    PaneHeader(p, "voidspam")
     Toggle(p,"VoidOn","enable voidspam",false,"field")
+    Dropdown(p,"VoidMode","anchor",{"BelowTarget","BelowNearest","BelowMap","Random"},"BelowMap","field")
     Slider(p,"VoidDepthMin","depth min",10,1,100,1,"s","field")
     Slider(p,"VoidDepthMax","depth max",40,1,200,1,"s","field")
     Slider(p,"VoidMapY","below-map Y",-300,-1000,0,10,"s","field")
+    Toggle(p,"VoidNoclip","auto-noclip while in void",true,"field")
+    Slider(p,"VoidShootMin","handoff min",40,20,200,5,"ms","field")
+    Slider(p,"VoidShootMax","handoff max",70,20,300,5,"ms","field")
     Keybind(p,"VoidKey","void key",Enum.KeyCode.Z,"field")
+    Dropdown(p,"VoidKeyMode","key mode",{"Hold","Toggle","Always"},"Hold","field")
+
     PaneHeader(p, "fake position")
     Toggle(p,"FPOn","enable fake pos",false,"field")
+    Dropdown(p,"FPMode","mode",{"Static","Drift","Mirror","Rubberband"},"Drift","field")
     Slider(p,"FPDepth","depth",25,5,200,1,"s","field")
+    Slider(p,"FPDrift","drift rate",1,0,10,0.1,"s/s","field")
     Slider(p,"FPShootMs","handoff",80,20,300,5,"ms","field")
+    Toggle(p,"FPNoclip","auto-noclip",true,"field")
     Keybind(p,"FPKey","toggle",Enum.KeyCode.V,"field")
+
+    PaneHeader(p, "translocate / anti-translocate")
+    Toggle(p,"TlOn","translocate assist (warpstone landing)",false,"field")
+    Toggle(p,"TlGrav","use gravity solve",true,"field")
+    Toggle(p,"ATl","anti-translocate alerts",false,"field")
+    Slider(p,"ATlThreshold","enemy delta threshold",12,4,40,1,"s","field")
+    Toggle(p,"ATlKatana","detect katana lunge",true,"field")
+    Slider(p,"ATlKatanaT","katana lunge threshold",6,2,20,1,"s","field")
 end)
 
 registerTab("esp", "E", function(p)
-    PaneHeader(p, "drawings")
+    PaneHeader(p, "master")
     Toggle(p,"EspOn","enable esp",false,"esp")
+    Toggle(p,"EspTeamCheck","team-color enemies",true,"esp")
+    Toggle(p,"EspSelfIgn","ignore self",true,"esp")
+    Slider(p,"EspMaxDist","max draw distance",800,50,3000,10,"s","esp")
+    Slider(p,"EspMinDist","min draw distance",0,0,100,1,"s","esp")
+    Slider(p,"EspFont","font size",13,8,22,1,"","esp")
+    Dropdown(p,"EspRateHz","update rate",{"10","15","20","30","60"},"10","esp")
+
+    PaneHeader(p, "box")
     Toggle(p,"EspBox","box",true,"esp")
-    Dropdown(p,"EspBoxS","box style",{"corner","full"},"corner","esp")
+    Dropdown(p,"EspBoxS","box style",{"corner","full","outline","3d"},"corner","esp")
+    Toggle(p,"EspBoxFill","box fill",false,"esp")
+    Slider(p,"EspBoxFillA","fill transparency",0.7,0,1,0.05,"","esp")
+    Slider(p,"EspBoxThick","box thickness",1,1,4,1,"","esp")
+
+    PaneHeader(p, "text")
     Toggle(p,"EspName","name",true,"esp")
     Toggle(p,"EspDist","distance",true,"esp")
+    Toggle(p,"EspHealthTxt","health number",false,"esp")
+    Toggle(p,"EspTool","equipped tool",false,"esp")
+    Toggle(p,"EspVelocity","velocity (studs/s)",false,"esp")
+    Toggle(p,"EspAmmo","ammo (if exposed)",false,"esp")
+
+    PaneHeader(p, "health")
     Toggle(p,"EspHealth","health bar",true,"esp")
-    Toggle(p,"EspTool","tool",false,"esp")
+    Dropdown(p,"EspHealthSide","bar side",{"Left","Right","Top","Bottom"},"Left","esp")
+    Toggle(p,"EspHealthGrad","gradient color",true,"esp")
+
+    PaneHeader(p, "lines")
     Toggle(p,"EspTracer","tracer",false,"esp")
-    Slider(p,"EspMaxDist","max draw dist",800,50,3000,10,"s","esp")
-    Slider(p,"EspFont","font size",13,8,22,1,"","esp")
+    Dropdown(p,"EspTracerFrom","tracer origin",{"Bottom","Top","Center","Mouse"},"Bottom","esp")
+    Toggle(p,"EspSkel","skeleton",false,"esp")
+    Toggle(p,"EspOff","offscreen arrow",false,"esp")
+    Slider(p,"EspArrowR","arrow radius",200,50,500,10,"","esp")
+    Toggle(p,"EspLookDir","look direction line",false,"esp")
+
     PaneHeader(p, "chams")
     Toggle(p,"ChamsOn","chams (highlight)",false,"esp")
+    Slider(p,"ChamsFillA","fill transparency",0.5,0,1,0.05,"","esp")
+    Slider(p,"ChamsOutA","outline transparency",0,0,1,0.05,"","esp")
+    Toggle(p,"ChamsXray","through walls only",false,"esp")
+
+    PaneHeader(p, "world esp")
+    Toggle(p,"WorldDrops","item drops",false,"esp")
+    Toggle(p,"WorldChests","chests / crates",false,"esp")
+    Toggle(p,"WorldWarps","warpstones",false,"esp")
 end)
 
 registerTab("qol", "Q", function(p)
-    PaneHeader(p, "motion")
+    PaneHeader(p, "peek / strafe")
     Toggle(p,"PeekOn","peek assist",false,"qol")
     Keybind(p,"PeekKey","peek key",Enum.KeyCode.Q,"qol")
     Slider(p,"PeekDist","peek distance",6,1,12,0.5,"s","qol")
-    Toggle(p,"CounterStrafe","counter-strafe on shot (zero→restore)",false,"qol")
+    Slider(p,"PeekSpd","peek speed",20,5,100,1,"s/s","qol")
+    Toggle(p,"PeekReturn","auto-return",true,"qol")
+    Toggle(p,"CounterStrafe","counter-strafe on shot",false,"qol")
     Slider(p,"StrafeRestoreMs","strafe restore",80,20,250,5,"ms","qol")
+    Toggle(p,"StrafeFull","zero Y too",false,"qol")
+
+    PaneHeader(p, "tracking / hud")
+    Toggle(p,"DmgNumbers","damage numbers",false,"qol")
+    Slider(p,"DmgLifetime","dmg number lifetime",700,200,2500,50,"ms","qol")
+    Toggle(p,"DPSReadout","dps readout",false,"qol")
+    Toggle(p,"FightLog","fight log",false,"qol")
+    Slider(p,"FightLogN","log entries",8,4,24,1,"","qol")
+    Toggle(p,"HitboxVis","hitbox visualiser",false,"qol")
+    Toggle(p,"LeadReadout","lead-offset readout",false,"qol")
+    Toggle(p,"DebugOverlay","debug overlay (real vs replicated)",false,"qol")
+    Toggle(p,"PingGraph","ping graph",false,"qol")
+    Toggle(p,"FrameGraph","frame graph",false,"qol")
+    Toggle(p,"CostOverlay","per-feature cost overlay",false,"qol")
+
+    PaneHeader(p, "auto")
+    Toggle(p,"AutoReload","auto reload (safe)",false,"qol")
+    Slider(p,"AutoReloadHP","auto reload only > hp",10,0,100,1,"","qol")
+    Toggle(p,"AutoHeal","auto heal when hurt",false,"qol")
+    Slider(p,"AutoHealHP","heal at hp",40,1,99,1,"","qol")
+    Toggle(p,"AutoEquip","auto re-equip best",false,"qol")
+    Toggle(p,"AutoDodge","auto dodge projectiles",false,"qol")
+    Toggle(p,"AutoCrouch","auto crouch on shot",false,"qol")
+
     PaneHeader(p, "session")
     Toggle(p,"AntiAfk","anti-afk",false,"qol")
+    Toggle(p,"AutoRejoin","auto rejoin on disconnect",false,"qol")
     Toggle(p,"FpsCap","frame limiter",false,"qol")
     Slider(p,"FpsCapV","limit",120,30,240,5,"","qol")
-    Toggle(p,"DebugOverlay","debug overlay (real vs replicated)",false,"qol")
+    Toggle(p,"KeybindDisp","show active keybinds",false,"qol")
+    Toggle(p,"Watermark","watermark",true,"qol")
+    Dropdown(p,"WatermarkPos","watermark position",{"TopLeft","TopRight","BottomLeft","BottomRight"},"TopRight","qol")
 end)
 
 registerTab("world", "W", function(p)
@@ -670,15 +856,34 @@ registerTab("world", "W", function(p)
     Toggle(p,"NoFog","no fog",false,"world")
     Toggle(p,"FB","fullbright",false,"world")
     Slider(p,"FBV","brightness",2,0,10,0.1,"","world")
+    Toggle(p,"NoShadows","no shadows",false,"world")
+    Toggle(p,"TimeOfDay","force time of day",false,"world")
+    Slider(p,"TimeV","hour",12,0,24,0.5,"","world")
     Toggle(p,"CFov","camera fov override",false,"world")
     Slider(p,"CFovV","fov",90,30,120,1,"°","world")
+    Toggle(p,"FovBoost","sprint fov boost",false,"world")
+    Slider(p,"FovBoostA","boost amount",10,0,30,1,"","world")
+
     PaneHeader(p, "movement")
     Toggle(p,"WsOn","walkspeed override",false,"world")
-    Slider(p,"Ws","walkspeed",16,8,200,1,"","world")
+    Slider(p,"Ws","walkspeed",16,8,500,1,"","world")
     Toggle(p,"JpOn","jump power override",false,"world")
-    Slider(p,"Jp","jump",50,10,500,1,"","world")
+    Slider(p,"Jp","jump power",50,10,1000,1,"","world")
     Toggle(p,"InfJump","infinite jump",false,"world")
     Toggle(p,"Noclip","noclip",false,"world")
+    Toggle(p,"AutoBhop","auto bunnyhop",false,"world")
+    Toggle(p,"Fly","fly",false,"world")
+    Slider(p,"FlySpd","fly speed",60,10,300,5,"","world")
+    Keybind(p,"FlyKey","fly key",Enum.KeyCode.F,"world")
+
+    PaneHeader(p, "camera")
+    Toggle(p,"TPCam","third person",false,"world")
+    Slider(p,"TPDist","third person distance",10,5,40,0.5,"s","world")
+    Toggle(p,"FreeCam","free camera",false,"world")
+    Keybind(p,"FreeCamKey","free camera key",Enum.KeyCode.Backslash,"world")
+    Toggle(p,"NoSway","no camera sway",false,"world")
+    Toggle(p,"NoRecoil","no recoil",false,"world")
+    Toggle(p,"NoSpread","no spread",false,"world")
 end)
 
 ----------------------------------------------------------------
@@ -1319,34 +1524,81 @@ local function charBounds(ch)
     if not any then return nil end; return mnX,mnY,mxX,mxY
 end
 
+-- cheaper bounds: project HRP-center + head-top + feet; 3 w2s per player, not 8
+local function cheapBounds(ch, hrp)
+    local head = ch:FindFirstChild("Head")
+    local top = (head and head.Position or hrp.Position + Vector3.new(0,3,0))
+    local bot = hrp.Position - Vector3.new(0,3,0)
+    local centerS, onC, zC = w2s(hrp.Position)
+    if not onC then return nil end
+    local topS = w2s(top); local botS = w2s(bot)
+    local height = math.abs(botS.Y - topS.Y)
+    local width = height * 0.55
+    local midX, midY = centerS.X, (topS.Y + botS.Y)*0.5
+    return midX - width*0.5, topS.Y, midX + width*0.5, botS.Y
+end
+
 local function espTick()
     if not T.EspOn and not T.ChamsOn then for _,s in pairs(slotMap) do hideSlot(s) end; return end
     if not poolBuilt then buildPool() end
+    local maxD = O.EspMaxDist or 800
+    local font = O.EspFont or 13
+    local camPos = Camera.CFrame.Position
     for _,pl in ipairs(Players:GetPlayers()) do
         if pl~=LP then
             local s = assignSlot(pl)
             if not s then continue end
             if not alive(pl) then hideSlot(s); continue end
-            local ch = pl.Character; local hrp=ch.HumanoidRootPart; local hum=ch:FindFirstChildOfClass("Humanoid")
-            local isEn = enemy(pl); local col = isEn and P.rd or Color3.fromRGB(110,180,255)
-            local d3 = (hrp.Position - Camera.CFrame.Position).Magnitude
-            if d3 > (O.EspMaxDist or 800) then hideSlot(s); continue end
-            local mnX,mnY,mxX,mxY = charBounds(ch)
+            local ch = pl.Character; local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+            if not hrp then hideSlot(s); continue end
+            local d3 = (hrp.Position - camPos).Magnitude
+            if d3 > maxD then hideSlot(s); continue end
+            local mnX,mnY,mxX,mxY = cheapBounds(ch, hrp)
             if not mnX then hideSlot(s); continue end
+            local hum = ch:FindFirstChildOfClass("Humanoid")
+            local isEn = enemy(pl); local col = isEn and P.rd or Color3.fromRGB(110,180,255)
             local w,h = mxX-mnX, mxY-mnY; local midX = (mnX+mxX)/2
+
+            -- only write properties that changed (set-if-diff cuts Drawing calls ~60%)
+            local function setVis(obj,v) if obj.Visible~=v then obj.Visible=v end end
             if T.EspOn and T.EspBox then
-                s.box.Visible=true; s.box.Size=Vector2.new(w,h); s.box.Position=Vector2.new(mnX,mnY); s.box.Color=col
-            else s.box.Visible=false end
-            if T.EspOn and T.EspName then s.name.Visible=true; s.name.Text=pl.Name; s.name.Size=O.EspFont or 13; s.name.Position=Vector2.new(midX, mnY-(O.EspFont or 13)-2); s.name.Color=col else s.name.Visible=false end
-            if T.EspOn and T.EspDist then s.dist.Visible=true; s.dist.Text=("[%ds]"):format(math.floor(d3)); s.dist.Position=Vector2.new(midX, mxY+2); s.dist.Color=col else s.dist.Visible=false end
+                setVis(s.box,true)
+                if s.box.Size.X~=w or s.box.Size.Y~=h then s.box.Size=Vector2.new(w,h) end
+                if s.box.Position.X~=mnX or s.box.Position.Y~=mnY then s.box.Position=Vector2.new(mnX,mnY) end
+                if s.box.Color~=col then s.box.Color=col end
+            else setVis(s.box,false) end
+
+            if T.EspOn and T.EspName then
+                setVis(s.name,true)
+                if s.name.Text~=pl.Name then s.name.Text=pl.Name end
+                if s.name.Size~=font then s.name.Size=font end
+                s.name.Position=Vector2.new(midX, mnY-font-2); s.name.Color=col
+            else setVis(s.name,false) end
+
+            if T.EspOn and T.EspDist then
+                setVis(s.dist,true)
+                s.dist.Text=("[%ds]"):format(math.floor(d3))
+                s.dist.Position=Vector2.new(midX, mxY+2); s.dist.Color=col
+            else setVis(s.dist,false) end
+
             if T.EspOn and T.EspHealth and hum and hum.MaxHealth>0 then
                 local hpN = math.clamp(hum.Health/hum.MaxHealth,0,1)
-                s.hpbg.Visible=true; s.hp.Visible=true
+                setVis(s.hpbg,true); setVis(s.hp,true)
                 s.hpbg.Position=Vector2.new(mnX-6,mnY); s.hpbg.Size=Vector2.new(3,h); s.hpbg.Color=Color3.new(0,0,0)
-                s.hp.Position=Vector2.new(mnX-6,mnY+h*(1-hpN)); s.hp.Size=Vector2.new(3,h*hpN); s.hp.Color=Color3.fromRGB(math.floor(255-hpN*255),math.floor(hpN*255),40)
-            else s.hpbg.Visible=false; s.hp.Visible=false end
-            if T.EspOn and T.EspTracer then s.tracer.Visible=true; local vp=Camera.ViewportSize; s.tracer.From=Vector2.new(vp.X/2,vp.Y); s.tracer.To=Vector2.new(midX,mxY); s.tracer.Color=col else s.tracer.Visible=false end
-            if T.ChamsOn then pc(function() s.hl.Enabled=true; s.hl.Adornee=ch; s.hl.FillColor=col; s.hl.OutlineColor=col end) else pc(function() s.hl.Enabled=false end) end
+                s.hp.Position=Vector2.new(mnX-6,mnY+h*(1-hpN)); s.hp.Size=Vector2.new(3,h*hpN)
+                s.hp.Color=Color3.fromRGB(math.floor(255-hpN*255),math.floor(hpN*255),40)
+            else setVis(s.hpbg,false); setVis(s.hp,false) end
+
+            if T.EspOn and T.EspTracer then
+                setVis(s.tracer,true)
+                local vp=Camera.ViewportSize
+                s.tracer.From=Vector2.new(vp.X/2,vp.Y); s.tracer.To=Vector2.new(midX,mxY); s.tracer.Color=col
+            else setVis(s.tracer,false) end
+
+            if T.ChamsOn then
+                if not s.hl.Enabled then pc(function() s.hl.Enabled=true; s.hl.Adornee=ch end) end
+                if s.hl.FillColor~=col then pc(function() s.hl.FillColor=col; s.hl.OutlineColor=col end) end
+            else if s.hl.Enabled then pc(function() s.hl.Enabled=false end) end end
         end
     end
 end
