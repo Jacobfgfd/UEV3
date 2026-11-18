@@ -396,19 +396,21 @@ local DDPopup = N("Frame",{Size=UDim2.fromOffset(120,0),BackgroundColor3=P.row,B
 N("UIStroke",{Color=P.line,Thickness=1,Parent=DDPopup})
 local DDOpenFor = nil
 
+local DDOpenedAt = 0
 local function closeDDPopup()
     DDPopup.Visible = false
     DDOpenFor = nil
     for _,c in ipairs(DDPopup:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
 end
 
--- close popup when clicking outside
+-- close popup when clicking outside (only after a 0.15s grace so the same click that opened it can't close it)
 C(UIS.InputBegan:Connect(function(i)
     if i.UserInputType ~= Enum.UserInputType.MouseButton1 and i.UserInputType ~= Enum.UserInputType.Touch then return end
     if not DDPopup.Visible then return end
+    if os.clock() - DDOpenedAt < 0.15 then return end
     local mp = UIS:GetMouseLocation()
     local pop = DDPopup.AbsolutePosition; local sz = DDPopup.AbsoluteSize
-    if mp.X < pop.X or mp.X > pop.X+sz.X or mp.Y < pop.Y-20 or mp.Y > pop.Y+sz.Y then
+    if mp.X < pop.X or mp.X > pop.X+sz.X or mp.Y < pop.Y or mp.Y > pop.Y+sz.Y then
         task.defer(closeDDPopup)
     end
 end))
@@ -424,6 +426,7 @@ local function Dropdown(parent,k,label,items,def,tabName)
         if DDOpenFor == btn then closeDDPopup(); return end
         closeDDPopup()
         DDOpenFor = btn
+        DDOpenedAt = os.clock()
         local ap = btn.AbsolutePosition; local sz = btn.AbsoluteSize
         DDPopup.Position = UDim2.fromOffset(ap.X, ap.Y + sz.Y)
         DDPopup.Size = UDim2.fromOffset(sz.X, 16*#items)
@@ -1116,6 +1119,9 @@ local function learnSig(sig, args, n, origin)
     return known
 end
 
+-- STAGGERED HOOK INSTALL: wrap the metatable + Mouse.Hit a full second after load
+-- so the initial loadstring / compile frame doesn't also pay for a metatable swap.
+task.delay(1.0, function()
 local mt = getrawmetatable and getrawmetatable(game)
 if mt and setreadonly then
     pc(setreadonly, mt, false)
@@ -1221,7 +1227,6 @@ if mt and setreadonly then
     task.defer(function()
         local mouse = pcall(function() return LP:GetMouse() end) and LP:GetMouse()
         if not mouse then return end
-        local origHit = mouse.Hit
         C(RunService.Heartbeat:Connect(function()
             if T.MouseHit and aimPos and (T.Silent or T.RageOn) then
                 pc(function() mouse.Hit = CFrame.new(aimPos) end)
@@ -1229,6 +1234,7 @@ if mt and setreadonly then
         end))
     end)
 end
+end)  -- end task.delay(1.0) wrapper for hook install
 
 ----------------------------------------------------------------
 -- VOIDSPAM / DF / FAKE POS
@@ -1737,7 +1743,12 @@ local function schedulerTick()
     U._lastTickMs = (os.clock() - t0) * 1000
 end
 
-C(RunService.Heartbeat:Connect(schedulerTick))
+-- Staggered scheduler start: don't connect the per-frame tick for 1.5s so the loading
+-- game-chunk has headroom to settle before we start ticking features.
+task.delay(1.5, function()
+    C(RunService.Heartbeat:Connect(schedulerTick))
+    warn("[UE3] scheduler online")
+end)
 
 -- anti-afk
 pcall(function() C(LP.Idled:Connect(function()
