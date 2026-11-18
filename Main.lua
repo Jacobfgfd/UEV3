@@ -91,11 +91,12 @@ local function rebuildCharCache(ch)
 end
 rebuildCharCache(LP.Character)
 local function resetOnRespawn()
-    -- reset feature state so a death doesn't leave stale anchors / dead pcw flags
     if U._pcwState then for _,v in pairs(U._pcwState) do v.dead=false; v.fails=0 end end
     if voidCamAnchor then pcall(function() voidCamAnchor:Destroy() end); voidCamAnchor=nil end
     if fpCamAnchor then pcall(function() fpCamAnchor:Destroy() end); fpCamAnchor=nil end
+    if spatialCamAnchor then pcall(function() spatialCamAnchor:Destroy() end); spatialCamAnchor=nil end
     fpSurfacePos = nil; voidShootUntil = 0; fpShootUntil = 0
+    spatialRealPos = nil; spatialFakeReal = nil; spatialNextRandTP = 0
     if DF then DF.handoffUntil = 0 end
     U._strafeRestoreAt = 0
 end
@@ -700,6 +701,38 @@ registerTab("rage", "R", function(p)
     Toggle(p,"AntiSpin","defeat spin",true,"rage")
     Toggle(p,"AntiDesync","desync breaker",false,"rage")
 
+    PaneHeader(p, "spatial attack (teleport / orbit / fake pos)")
+    Dropdown(p,"AttackPos","position mode",{"Normal","TeleportAbove","Orbit","RandomTeleport","VoidSpam","FakePos"},"Normal","rage")
+    Slider(p,"SpatialHeight","height above target",20,-50,100,1,"s","rage")
+    Toggle(p,"SpatialFace","always face target",true,"rage")
+    Toggle(p,"SpatialCamLock","keep camera at real position",true,"rage")
+    Toggle(p,"SpatialFarOK","orbit at any distance (ignore max range)",true,"rage")
+
+    -- Orbit
+    Slider(p,"OrbitRadius","orbit radius",15,3,80,0.5,"s","rage")
+    Slider(p,"OrbitSpeed","orbit speed",3,0.1,15,0.1,"rad/s","rage")
+    Slider(p,"OrbitYaw","orbit vertical offset",5,-50,50,0.5,"s","rage")
+    Toggle(p,"OrbitVerticalWobble","vertical wobble",false,"rage")
+    Slider(p,"OrbitWobbleAmp","wobble amplitude",4,0,20,0.5,"s","rage")
+
+    -- Random teleport
+    Slider(p,"RandTPMin","random tp min range",10,2,100,0.5,"s","rage")
+    Slider(p,"RandTPMax","random tp max range",30,2,200,0.5,"s","rage")
+    Slider(p,"RandTPRate","random tp rate",5,1,30,1,"hz","rage")
+    Toggle(p,"RandTPSphere","sphere (include vertical)",true,"rage")
+
+    -- VoidSpam (now inside rage)
+    Slider(p,"VoidDepth","voidspam depth",50,5,500,5,"s","rage")
+    Slider(p,"VoidHandMs","voidspam handoff",60,20,300,5,"ms","rage")
+    Toggle(p,"VoidNoclip","auto-noclip while voidspamming",true,"rage")
+
+    -- FakePos ragebot
+    Dropdown(p,"FakePosDir","fake direction",{"North","South","East","West","Random","Mirror","Above","Below"},"Random","rage")
+    Slider(p,"FakePosOffset","fake offset distance",25,5,200,0.5,"s","rage")
+    Slider(p,"FakePosRealDist","real position distance from target",6,1,30,0.5,"s","rage")
+    Slider(p,"FakePosHandMs","fake pos handoff",80,20,300,5,"ms","rage")
+    Toggle(p,"FakePosAutoReturn","snap back to fake after shot",true,"rage")
+
     PaneHeader(p, "observe / replay")
     Toggle(p,"ObserveOnly","observe mode (log remotes, no swap)",false,"rage")
     Toggle(p,"ObserveAll","observe all remote namecalls",false,"rage")
@@ -767,49 +800,6 @@ registerTab("anti-aim", "A", function(p)
     Slider(p,"AARollDeg","roll amount",0,-180,180,1,"°","anti-aim")
 end)
 
-registerTab("field", "F", function(p)
-    PaneHeader(p, "displacement field")
-    Toggle(p,"DFOn","enable field",false,"field")
-    Dropdown(p,"DFPreset","shape",{"None","Flat","Lissajous","Coil","Chaos","Orbit","Dive","Zigzag"},"Lissajous","field")
-    Slider(p,"DFAmp","amplitude",15,2,80,1,"s","field")
-    Slider(p,"DFHorizMax","horizontal clamp",4,0,10,0.5,"s","field")
-    Slider(p,"DFFreq","base frequency",1,0.1,4,0.1,"hz","field")
-    Dropdown(p,"DFRate","write rate",{"Slow","Normal","Fast","Burst"},"Normal","field")
-    Toggle(p,"DFEscalate","escalate on repeat hits",true,"field")
-    Slider(p,"DFEscMult","escalation multiplier",1.5,1,3,0.1,"x","field")
-    Toggle(p,"DFPerLife","per-life seed reroll",true,"field")
-    Toggle(p,"DFCamLock","lock camera to real pos",true,"field")
-
-    PaneHeader(p, "voidspam")
-    Toggle(p,"VoidOn","enable voidspam",false,"field")
-    Dropdown(p,"VoidMode","anchor",{"BelowTarget","BelowNearest","BelowMap","Random"},"BelowMap","field")
-    Slider(p,"VoidDepthMin","depth min",10,1,100,1,"s","field")
-    Slider(p,"VoidDepthMax","depth max",40,1,200,1,"s","field")
-    Slider(p,"VoidMapY","below-map Y",-300,-1000,0,10,"s","field")
-    Toggle(p,"VoidNoclip","auto-noclip while in void",true,"field")
-    Slider(p,"VoidShootMin","handoff min",40,20,200,5,"ms","field")
-    Slider(p,"VoidShootMax","handoff max",70,20,300,5,"ms","field")
-    Keybind(p,"VoidKey","void key",Enum.KeyCode.Z,"field")
-    Dropdown(p,"VoidKeyMode","key mode",{"Hold","Toggle","Always"},"Hold","field")
-
-    PaneHeader(p, "fake position")
-    Toggle(p,"FPOn","enable fake pos",false,"field")
-    Dropdown(p,"FPMode","mode",{"Static","Drift","Mirror","Rubberband"},"Drift","field")
-    Slider(p,"FPDepth","depth",25,5,200,1,"s","field")
-    Slider(p,"FPDrift","drift rate",1,0,10,0.1,"s/s","field")
-    Slider(p,"FPShootMs","handoff",80,20,300,5,"ms","field")
-    Toggle(p,"FPNoclip","auto-noclip",true,"field")
-    Keybind(p,"FPKey","toggle",Enum.KeyCode.V,"field")
-
-    PaneHeader(p, "translocate / anti-translocate")
-    Toggle(p,"TlOn","translocate assist (warpstone landing)",false,"field")
-    Toggle(p,"TlGrav","use gravity solve",true,"field")
-    Toggle(p,"ATl","anti-translocate alerts",false,"field")
-    Slider(p,"ATlThreshold","enemy delta threshold",12,4,40,1,"s","field")
-    Toggle(p,"ATlKatana","detect katana lunge",true,"field")
-    Slider(p,"ATlKatanaT","katana lunge threshold",6,2,20,1,"s","field")
-end)
-
 registerTab("esp", "E", function(p)
     PaneHeader(p, "master")
     Toggle(p,"EspOn","enable esp",false,"esp")
@@ -860,49 +850,6 @@ registerTab("esp", "E", function(p)
     Toggle(p,"WorldWarps","warpstones",false,"esp")
 end)
 
-registerTab("qol", "Q", function(p)
-    PaneHeader(p, "peek / strafe")
-    Toggle(p,"PeekOn","peek assist",false,"qol")
-    Keybind(p,"PeekKey","peek key",Enum.KeyCode.Q,"qol")
-    Slider(p,"PeekDist","peek distance",6,1,12,0.5,"s","qol")
-    Slider(p,"PeekSpd","peek speed",20,5,100,1,"s/s","qol")
-    Toggle(p,"PeekReturn","auto-return",true,"qol")
-    Toggle(p,"CounterStrafe","counter-strafe on shot",false,"qol")
-    Slider(p,"StrafeRestoreMs","strafe restore",80,20,250,5,"ms","qol")
-    Toggle(p,"StrafeFull","zero Y too",false,"qol")
-
-    PaneHeader(p, "tracking / hud")
-    Toggle(p,"DmgNumbers","damage numbers",false,"qol")
-    Slider(p,"DmgLifetime","dmg number lifetime",700,200,2500,50,"ms","qol")
-    Toggle(p,"DPSReadout","dps readout",false,"qol")
-    Toggle(p,"FightLog","fight log",false,"qol")
-    Slider(p,"FightLogN","log entries",8,4,24,1,"","qol")
-    Toggle(p,"HitboxVis","hitbox visualiser",false,"qol")
-    Toggle(p,"LeadReadout","lead-offset readout",false,"qol")
-    Toggle(p,"DebugOverlay","debug overlay (real vs replicated)",false,"qol")
-    Toggle(p,"PingGraph","ping graph",false,"qol")
-    Toggle(p,"FrameGraph","frame graph",false,"qol")
-    Toggle(p,"CostOverlay","per-feature cost overlay",false,"qol")
-
-    PaneHeader(p, "auto")
-    Toggle(p,"AutoReload","auto reload (safe)",false,"qol")
-    Slider(p,"AutoReloadHP","auto reload only > hp",10,0,100,1,"","qol")
-    Toggle(p,"AutoHeal","auto heal when hurt",false,"qol")
-    Slider(p,"AutoHealHP","heal at hp",40,1,99,1,"","qol")
-    Toggle(p,"AutoEquip","auto re-equip best",false,"qol")
-    Toggle(p,"AutoDodge","auto dodge projectiles",false,"qol")
-    Toggle(p,"AutoCrouch","auto crouch on shot",false,"qol")
-
-    PaneHeader(p, "session")
-    Toggle(p,"AntiAfk","anti-afk",false,"qol")
-    Toggle(p,"AutoRejoin","auto rejoin on disconnect",false,"qol")
-    Toggle(p,"FpsCap","frame limiter",false,"qol")
-    Slider(p,"FpsCapV","limit",120,30,240,5,"","qol")
-    Toggle(p,"KeybindDisp","show active keybinds",false,"qol")
-    Toggle(p,"Watermark","watermark",true,"qol")
-    Dropdown(p,"WatermarkPos","watermark position",{"TopLeft","TopRight","BottomLeft","BottomRight"},"TopRight","qol")
-end)
-
 registerTab("world", "W", function(p)
     PaneHeader(p, "environment")
     Toggle(p,"NoFog","no fog",false,"world")
@@ -936,6 +883,13 @@ registerTab("world", "W", function(p)
     Toggle(p,"NoSway","no camera sway",false,"world")
     Toggle(p,"NoRecoil","no recoil",false,"world")
     Toggle(p,"NoSpread","no spread",false,"world")
+
+    PaneHeader(p, "session")
+    Toggle(p,"AntiAfk","anti-afk",false,"world")
+    Toggle(p,"AutoRejoin","auto rejoin on disconnect",false,"world")
+    Toggle(p,"FpsCap","frame limiter",false,"world")
+    Slider(p,"FpsCapV","limit",120,30,240,5,"","world")
+    Toggle(p,"Watermark","watermark",true,"world")
 end)
 
 ----------------------------------------------------------------
@@ -1097,9 +1051,14 @@ local function pickTarget()
             local pt = bestHitbox(p.Character)
             if pt then
                 local s,on = w2s(pt.Position); local d3 = (pt.Position-Camera.CFrame.Position).Magnitude
-                if on and d3 <= (O.MaxDist or 600) then
+                local distOK = d3 <= (O.MaxDist or 600)
+                local spatial = T.RageOn and (O.AttackPos or "Normal") ~= "Normal"
+                if T.SpatialFarOK and spatial then distOK = true; on = true end
+                if on and distOK then
                     local d2 = (s-m).Magnitude
-                    if d2 <= (O.Fov or 150) then
+                    local fovOK = d2 <= (O.Fov or 150)
+                    if T.SpatialFarOK and spatial then fovOK = true end
+                    if fovOK then
                         local sc
                         if prio=="ClosestToCrosshair" then sc=d2
                         elseif prio=="ClosestToPlayer" then sc=d3
@@ -1412,6 +1371,132 @@ local function dfTick()
 end
 
 ----------------------------------------------------------------
+-- SPATIAL ATTACK (ragebot positional modes)
+-- Owns HRP when T.RageOn and O.AttackPos ~= "Normal". All non-Normal modes keep the
+-- camera at the real surface position when SpatialCamLock is on, so the player's view
+-- looks normal while the HRP is wherever the mode places it.
+----------------------------------------------------------------
+-- globals so resetOnRespawn (declared earlier) can clear them
+spatialCamAnchor = nil
+spatialRealPos = nil   -- the real surface position used for camera lock
+spatialNextRandTP = 0
+spatialFakeReal = nil  -- fake-pos ragebot: where the HRP actually lives
+local function spatialEnsureAnchor()
+    if spatialCamAnchor then return end
+    spatialCamAnchor = Instance.new("Part")
+    spatialCamAnchor.Size = Vector3.one; spatialCamAnchor.Transparency = 1
+    spatialCamAnchor.Anchored = true; spatialCamAnchor.CanCollide = false
+    spatialCamAnchor.CanQuery = false; spatialCamAnchor.CanTouch = false
+    spatialCamAnchor.Massless = true; spatialCamAnchor.CastShadow = false
+    pc(function() spatialCamAnchor.Parent = Workspace end)
+end
+local function spatialDropAnchor()
+    if spatialCamAnchor then pc(function() spatialCamAnchor:Destroy() end); spatialCamAnchor=nil end
+    if U.Char.hum then pc(function() Camera.CameraSubject = U.Char.hum end) end
+    spatialRealPos = nil; spatialFakeReal = nil
+end
+local function spatialTargetPos()
+    if curTarget and alive(curTarget) then
+        local ch = curTarget.Character; local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+        if hrp then return hrp.Position, hrp end
+    end
+    return nil, nil
+end
+local function spatialNoclipSelf()
+    if not LP.Character then return end
+    for _,d in ipairs(LP.Character:GetDescendants()) do if d:IsA("BasePart") then pc(function() d.CanCollide=false end) end end
+end
+
+local function ragePosTick()
+    local mode = O.AttackPos or "Normal"
+    if not T.RageOn or mode == "Normal" or not U.Char.hrp then
+        if spatialCamAnchor then spatialDropAnchor() end
+        return
+    end
+    local tpos = spatialTargetPos()
+    if not tpos then return end
+    local hrp = U.Char.hrp
+    if not spatialRealPos then spatialRealPos = hrp.Position end
+
+    spatialEnsureAnchor()
+    if T.SpatialCamLock then
+        pc(function() spatialCamAnchor.CFrame = CFrame.new(spatialRealPos.X, spatialRealPos.Y+2, spatialRealPos.Z) end)
+        pc(function() Camera.CameraSubject = spatialCamAnchor end)
+    end
+
+    local function faceCF(newPos)
+        local look = (tpos - newPos)
+        if T.SpatialFace and look.Magnitude > 0.01 then
+            return CFrame.lookAt(newPos, tpos, Vector3.yAxis)
+        end
+        return CFrame.new(newPos) * (hrp.CFrame - hrp.CFrame.Position)
+    end
+
+    if mode == "TeleportAbove" then
+        local p = tpos + Vector3.new(0, O.SpatialHeight or 20, 0)
+        pc(function() if LP.Character.PivotTo then LP.Character:PivotTo(faceCF(p)) else hrp.CFrame = faceCF(p) end end)
+
+    elseif mode == "Orbit" then
+        local t = os.clock() * (O.OrbitSpeed or 3)
+        local r = O.OrbitRadius or 15
+        local yoff = O.OrbitYaw or 5
+        if T.OrbitVerticalWobble then yoff = yoff + math.sin(os.clock()*2.3) * (O.OrbitWobbleAmp or 4) end
+        local p = tpos + Vector3.new(math.cos(t)*r, yoff, math.sin(t)*r)
+        pc(function() if LP.Character.PivotTo then LP.Character:PivotTo(faceCF(p)) else hrp.CFrame = faceCF(p) end end)
+
+    elseif mode == "RandomTeleport" then
+        local now = os.clock()
+        if now < spatialNextRandTP then return end
+        spatialNextRandTP = now + 1/(O.RandTPRate or 5)
+        local mn = O.RandTPMin or 10; local mx = O.RandTPMax or 30
+        local d = mn + math.random()*(mx-mn)
+        local a = math.random()*math.pi*2
+        local vy = T.RandTPSphere and (math.random()-0.5) or 0
+        local offset = Vector3.new(math.cos(a)*d, vy*d*0.8, math.sin(a)*d)
+        local p = tpos + offset
+        pc(function() if LP.Character.PivotTo then LP.Character:PivotTo(faceCF(p)) else hrp.CFrame = faceCF(p) end end)
+
+    elseif mode == "VoidSpam" then
+        local depth = O.VoidDepth or 50
+        local p = Vector3.new(tpos.X, tpos.Y - depth, tpos.Z)
+        if T.VoidNoclip then spatialNoclipSelf() end
+        pc(function() if LP.Character.PivotTo then LP.Character:PivotTo(faceCF(p)) else hrp.CFrame = faceCF(p) end end)
+        pc(function() hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z) end)
+
+    elseif mode == "FakePos" then
+        -- Real HRP sits CLOSE to target (FakePosRealDist); the client's CAMERA sits at
+        -- a fake offset from the target (the "fake position" the opponent sees).
+        local real = tpos + Vector3.new(0, (O.SpatialHeight or 6), 0)  -- small offset so we're not inside them
+        if O.FakePosRealDist and O.FakePosRealDist > 0 then
+            -- offset the real position horizontally toward their look direction (behind them if facing us)
+            local _,enemyHrp = spatialTargetPos()
+            if enemyHrp then
+                real = tpos + enemyHrp.CFrame.LookVector * (O.FakePosRealDist or 6) + Vector3.new(0, 2, 0)
+            end
+        end
+        spatialFakeReal = real
+        -- compute the camera's apparent position
+        local dir = O.FakePosDir or "Random"
+        local off = O.FakePosOffset or 25
+        local v
+        if dir == "North" then v = Vector3.new(0,0,-off)
+        elseif dir == "South" then v = Vector3.new(0,0,off)
+        elseif dir == "East"  then v = Vector3.new(off,0,0)
+        elseif dir == "West"  then v = Vector3.new(-off,0,0)
+        elseif dir == "Above" then v = Vector3.new(0,off,0)
+        elseif dir == "Below" then v = Vector3.new(0,-off,0)
+        elseif dir == "Mirror" then local cam = Camera.CFrame.LookVector; v = Vector3.new(-cam.X,0,-cam.Z).Unit * off
+        else -- Random
+            local a=math.random()*math.pi*2; v = Vector3.new(math.cos(a)*off, (math.random()-0.5)*off*0.3, math.sin(a)*off)
+        end
+        local fakeCamPos = real + v
+        pc(function() spatialCamAnchor.CFrame = CFrame.new(fakeCamPos.X, fakeCamPos.Y+2, fakeCamPos.Z) end)
+        pc(function() Camera.CameraSubject = spatialCamAnchor end)
+        pc(function() if LP.Character.PivotTo then LP.Character:PivotTo(faceCF(real)) else hrp.CFrame = faceCF(real) end end)
+    end
+end
+
+----------------------------------------------------------------
 -- AA
 ----------------------------------------------------------------
 local onShotUntil = 0
@@ -1614,8 +1699,11 @@ local function espTick()
     if not T.EspOn and not T.ChamsOn then for _,s in pairs(slotMap) do hideSlot(s) end; return end
     if not poolBuilt then buildPool() end
     local maxD = O.EspMaxDist or 800
+    local minD = O.EspMinDist or 0
     local font = O.EspFont or 13
     local camPos = Camera.CFrame.Position
+    local vp = Camera.ViewportSize
+    local vpHalfX = vp.X*0.5
     for _,pl in ipairs(Players:GetPlayers()) do
         if pl~=LP then
             local s = assignSlot(pl)
@@ -1624,7 +1712,7 @@ local function espTick()
             local ch = pl.Character; local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
             if not hrp then hideSlot(s); continue end
             local d3 = (hrp.Position - camPos).Magnitude
-            if d3 > maxD then hideSlot(s); continue end
+            if d3 > maxD or d3 < minD then hideSlot(s); continue end
             local mnX,mnY,mxX,mxY = cheapBounds(ch, hrp)
             if not mnX then hideSlot(s); continue end
             local hum = ch:FindFirstChildOfClass("Humanoid")
@@ -1663,8 +1751,7 @@ local function espTick()
 
             if T.EspOn and T.EspTracer then
                 setVis(s.tracer,true)
-                local vp=Camera.ViewportSize
-                s.tracer.From=Vector2.new(vp.X/2,vp.Y); s.tracer.To=Vector2.new(midX,mxY); s.tracer.Color=col
+                s.tracer.From=Vector2.new(vpHalfX,vp.Y); s.tracer.To=Vector2.new(midX,mxY); s.tracer.Color=col
             else setVis(s.tracer,false) end
 
             if T.ChamsOn then
@@ -1747,35 +1834,17 @@ local Entries = {
     {name="move",     kind="hz",    tier=2, hz=10, fn=moveTick, pred=function() return T.WsOn or T.JpOn or T.Noclip end},
     {name="peek",     kind="frame", tier=2, fn=peekTick, pred=function() return T.PeekOn end},
     {name="strafe",   kind="frame", tier=2, fn=strafeRestoreTick, pred=function() return U._strafeRestoreAt~=0 end},
-    {name="esp",      kind="hz",    tier=3, hz=10, fn=espTick, pred=function() return T.EspOn or T.ChamsOn end},
-    {name="hp",       kind="hz",    tier=3, hz=15, fn=hpTrackTick, pred=function() return T.DFEscalate or T.EspHealth end},
-    {name="df-esc",   kind="hz",    tier=3, hz=10, fn=dfEscalationTick, pred=function() return T.DFEscalate end},
+    {name="esp",      kind="hz",    tier=3, hz=5,  fn=espTick, pred=function() return T.EspOn or T.ChamsOn end, dyn=function() return tonumber(O.EspRateHz or "10") or 10 end},
+    {name="hp",       kind="hz",    tier=3, hz=10, fn=hpTrackTick, pred=function() return T.EspHealth end},
     {name="bt",       kind="hz",    tier=3, hz=30, fn=function() for _,p in ipairs(Players:GetPlayers()) do if p~=LP then bt_push(p) end end end, pred=function() return T.BTOn end},
-    {name="df",       kind="gated", tier=3, fn=dfTick, pred=function() return T.DFOn end},
-    {name="fp",       kind="gated", tier=3, fn=fpTick, pred=function() return T.FPOn end},
-    {name="void",     kind="gated", tier=3, fn=voidTick, pred=function() return T.VoidOn and not T.FPOn and not T.DFOn end},
+    {name="ragePos",  kind="hz",    tier=2, hz=60, fn=ragePosTick, pred=function() return T.RageOn and (O.AttackPos or "Normal") ~= "Normal" and aimPos end},
 }
 
--- arbiter timers for the gated features
-local nextGate = {df=0, fp=0, void=0}
-local function dueGated(now, name)
-    if name=="df"   then return now >= nextGate.df,   function() nextGate.df = now + (DF.nextDelay or 0.02) end end
-    if name=="fp"   then return now >= nextGate.fp,   function() nextGate.fp = now + 1/30 end end
-    if name=="void" then return now >= nextGate.void, function() nextGate.void = now + 1/30 end end
-    return true, function() end
-end
-
-local prevArb = "none"
-local function resetArb() nextGate.df, nextGate.fp, nextGate.void = 0,0,0 end
+local function dueGated(now, name) return true, function() end end
 
 local function schedulerTick()
     local t0 = os.clock()
     U._tickNow = t0
-
-    -- reset gated timers on arbiter switch
-    local arb = (T.FPOn and "fp") or (T.DFOn and "df") or (T.VoidOn and "void") or "none"
-    if arb ~= prevArb then resetArb(); prevArb = arb end
-
     local BUDGET = 0.002  -- 2ms
     local tier = 1
     local overran = false
@@ -1788,7 +1857,7 @@ local function schedulerTick()
             if e.kind == "hz" then
                 e.nextAt = e.nextAt or 0
                 if t0 < e.nextAt then due=false
-                else commit = function() e.nextAt = t0 + 1/e.hz end end
+                else local hz = (e.dyn and e.dyn()) or e.hz; commit = function() e.nextAt = t0 + 1/hz end end
             elseif e.kind == "gated" then
                 due, commit = dueGated(t0, e.name)
             end
