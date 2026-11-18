@@ -918,17 +918,33 @@ if mt and setreadonly then
     local oldNc  = mt.__namecall
     local observeCount = 0
 
+    -- cached per-Instance "is this a fire remote" result so we don't lower()+9*find() every call
+    local fireNameCache = setmetatable({}, {__mode="k"})
+    local function isFireRemote(inst)
+        local v = fireNameCache[inst]
+        if v ~= nil then return v end
+        local nm = (inst.Name or ""):lower()
+        v = (nm:find("fire") or nm:find("shoot") or nm:find("weapon") or nm:find("bullet") or nm:find("hit") or nm:find("damage") or nm:find("gun") or nm:find("raycast")) and true or false
+        fireNameCache[inst] = v
+        return v
+    end
+
     mt.__namecall = newcclosure(function(self, ...)
+        -- ULTRA-FAST DEAD PATH: when every swap/observe flag is off, pass through without ANY work.
+        -- This is the hot path that games hit thousands of times per second.
+        if not (T.Silent or T.RageOn or T.ObserveOnly or T.ObserveAll) then
+            return oldNc(self, ...)
+        end
         if typeof(self)~="Instance" then return oldNc(self,...) end
         if U._inHook[self] then return oldNc(self,...) end
         local method = getnamecallmethod()
         if method ~= "FireServer" and method ~= "InvokeServer" then return oldNc(self,...) end
-        local args = {...}
-        local n = select("#", ...)
 
+        -- observe (still gated; only runs if an observe flag is on)
         if T.ObserveOnly or T.ObserveAll then
             local cls = tostring(self.ClassName)
             if cls:find("Remote") then
+                local args = {...}; local n = select("#", ...)
                 local sig = ("%s::%s(%d)[%s]"):format(cls, self.Name, n, typeSig(args,n))
                 if not U._observeLog[sig] and observeCount < (O.ObserveN or 120) then
                     observeCount += 1; U._observeLog[sig] = true
@@ -939,15 +955,13 @@ if mt and setreadonly then
             if T.ObserveOnly then return oldNc(self,...) end
         end
 
-        local hasAim = aimPos and (T.Silent or T.RageOn)
-        local nm = (self.Name or ""):lower()
-        local isFire = nm:find("fire") or nm:find("shoot") or nm:find("weapon") or nm:find("bullet") or nm:find("hit") or nm:find("damage") or nm:find("gun") or nm:find("raycast") or nm:find("remote")
-        if not isFire then return oldNc(self,...) end
+        -- past here only runs with Silent/Rage on. Fast-reject non-fire remotes via cache.
+        if not aimPos then return oldNc(self,...) end
+        if not isFireRemote(self) then return oldNc(self,...) end
+
+        local args = {...}
+        local n = select("#", ...)
         local sig = ("%s|%d|%s"):format(self.Name, n, typeSig(args,n))
-        if not hasAim then
-            pcall(learnSig, sig, args, n, Camera.CFrame.Position)
-            return oldNc(self,...)
-        end
         if T.ReplayLast then
             local raw={}; for i=1,n do raw[i]=args[i] end
             U._lastFire = {self=self, method=method, args=raw, n=n, sig=self.Name.."|"..n}
@@ -993,16 +1007,22 @@ if mt and setreadonly then
         return result
     end)
 
-    mt.__index = newcclosure(function(self,k)
-        if T.MouseHit and aimPos and T.Silent then
-            if self==LP and k=="GetMouse" then
-                local real=oldIdx(self,k)
-                return function(...) local mm=real(...); pc(function() mm.Hit=CFrame.new(aimPos) end); return mm end
-            end
-        end
-        return oldIdx(self,k)
-    end)
+    -- NOTE: __index override removed. Wrapping the game metatable's __index fires for every
+    -- property read on every Instance in the game — murders FPS. MouseHit is handled below
+    -- via a single, direct hook of the LocalPlayer's Mouse.Hit, without touching __index.
     pc(setreadonly, mt, true)
+
+    -- Direct MouseHit hook: one-shot, no metatable detour.
+    task.defer(function()
+        local mouse = pcall(function() return LP:GetMouse() end) and LP:GetMouse()
+        if not mouse then return end
+        local origHit = mouse.Hit
+        C(RunService.Heartbeat:Connect(function()
+            if T.MouseHit and aimPos and (T.Silent or T.RageOn) then
+                pc(function() mouse.Hit = CFrame.new(aimPos) end)
+            end
+        end))
+    end)
 end
 
 ----------------------------------------------------------------
