@@ -357,8 +357,12 @@ local function groupHeader(parent, name, onCountFn)
 end
 
 local function row(parent)
-    local r = N("Frame",{Size=UDim2.new(1,0,0,24),BackgroundTransparency=1,Parent=parent})
+    -- row is a TextButton so it fires MouseEnter/Leave for hover feedback
+    local r = N("TextButton",{Size=UDim2.new(1,0,0,24),BackgroundColor3=P.hover,BackgroundTransparency=1,BorderSizePixel=0,
+        AutoButtonColor=false,Text="",Parent=parent})
     N("UIPadding",{PaddingLeft=UDim.new(0,6),PaddingRight=UDim.new(0,8),Parent=r})
+    r.MouseEnter:Connect(function() r.BackgroundTransparency=0.7 end)
+    r.MouseLeave:Connect(function() r.BackgroundTransparency=1 end)
     return r
 end
 
@@ -378,7 +382,9 @@ local function Toggle(parent,k,label,def,tabName)
     O[k] = O[k]; T[k] = T[k]==nil and (def or false) or T[k]
     local r = addRow(label, parent, tabName); labelLeft(r,label)
     local track = N("Frame",{Size=UDim2.fromOffset(28,14),Position=UDim2.new(1,-28,0.5,-7),BackgroundColor3=P.row,BorderSizePixel=0,Parent=r})
+    N("UIStroke",{Color=P.line,Thickness=1,Parent=track})
     local knob  = N("Frame",{Size=UDim2.fromOffset(10,10),Position=UDim2.fromOffset(2,2),BackgroundColor3=P.dim,BorderSizePixel=0,Parent=track})
+    N("UICorner",{CornerRadius=UDim.new(0,1),Parent=knob})
     local function render()
         if T[k] then
             TweenService:Create(knob,TweenInfo.new(0.09),{Position=UDim2.fromOffset(16,2),BackgroundColor3=P.bg}):Play()
@@ -471,7 +477,10 @@ local function Dropdown(parent,k,label,items,def,tabName)
     local btn = N("TextButton",{Size=UDim2.fromOffset(120,16),Position=UDim2.new(1,-128,0.5,-8),BackgroundColor3=P.row,BorderSizePixel=0,
         Text=O[k],TextSize=10,TextColor3=P.tx,AutoButtonColor=false,TextXAlignment=Enum.TextXAlignment.Right,
         Font={face=F.monoFace,en=F.monoEnum},Parent=r})
-    N("UIPadding",{PaddingRight=UDim.new(0,6),Parent=btn})
+    N("UIStroke",{Color=P.line,Thickness=1,Parent=btn})
+    N("UIPadding",{PaddingRight=UDim.new(0,14),Parent=btn})
+    -- chevron
+    N("TextLabel",{Size=UDim2.fromOffset(10,16),Position=UDim2.new(1,-12,0,0),BackgroundTransparency=1,Text="v",TextSize=10,TextColor3=ac(),Font={face=F.monoFace,en=F.monoEnum},Parent=btn})
     btn.MouseButton1Click:Connect(function()
         if DDOpenFor == btn then closeDDPopup(); return end
         closeDDPopup()
@@ -572,7 +581,7 @@ end
 local function makeRailButton(tabRec, index)
     local b = N("TextButton",{Size=UDim2.fromOffset(44,44),Position=UDim2.fromOffset(1,(index-1)*44),BackgroundColor3=P.bg,BorderSizePixel=0,
         AutoButtonColor=false,Text="",Parent=Rail})
-    local bar = N("Frame",{Size=UDim2.fromOffset(2,44),BackgroundColor3=ac(),BorderSizePixel=0,Visible=false,Parent=b,ZIndex=2})
+    local bar = N("Frame",{Size=UDim2.fromOffset(3,36),Position=UDim2.fromOffset(0,4),BackgroundColor3=ac(),BorderSizePixel=0,Visible=false,Parent=b,ZIndex=2})
     local ico = N("TextLabel",{Size=UDim2.new(1,0,0,16),Position=UDim2.fromOffset(0,10),BackgroundTransparency=1,Text=tabRec.icon,TextSize=16,TextColor3=P.dim,
         Font={face=F.capFace,en=F.capEnum},Parent=b})
     local lbl = N("TextLabel",{Size=UDim2.new(1,0,0,10),Position=UDim2.fromOffset(0,28),BackgroundTransparency=1,Text=string.upper(tabRec.name:sub(1,4)),TextSize=9,TextColor3=P.dim,
@@ -647,12 +656,13 @@ end)
 registerTab("rage", "R", function(p)
     PaneHeader(p, "core")
     Toggle(p,"RageOn","enable rage",false,"rage")
-    Toggle(p,"Silent","silent aim",false,"rage")
-    Toggle(p,"MouseHit","mouse.hit hook (detectable)",false,"rage")
-    Toggle(p,"AutoFire","auto fire",false,"rage")
-    Toggle(p,"AutoScope","auto scope",false,"rage")
-    Toggle(p,"AutoShoot","trigger on target in cone",false,"rage")
-    Toggle(p,"AutoStop","stop walking on fire",false,"rage")
+    Toggle(p,"Silent","silent aim (no key required)",false,"rage")
+    Toggle(p,"HookAll","match ALL remotes (bypass name filter)",false,"rage")
+    Toggle(p,"MouseHit","mouse.hit hook",false,"rage")
+    Toggle(p,"AutoFire","auto fire (hold-fire stream)",false,"rage")
+    Toggle(p,"AutoShoot","trigger on target acquired",false,"rage")
+    Slider(p,"AutoShootDelay","trigger delay",40,0,500,10,"ms","rage")
+    Toggle(p,"AutoStop","stop velocity on fire",false,"rage")
     Slider(p,"FireRate","fire rate",8,1,25,1,"hz","rage")
     Slider(p,"Fov","fov",150,20,800,10,"","rage")
     Slider(p,"MaxDist","max distance",600,50,3000,10,"s","rage")
@@ -700,6 +710,24 @@ registerTab("rage", "R", function(p)
     Toggle(p,"AntiJitter","defeat jitter",true,"rage")
     Toggle(p,"AntiSpin","defeat spin",true,"rage")
     Toggle(p,"AntiDesync","desync breaker",false,"rage")
+
+    PaneHeader(p, "priority targets")
+    Toggle(p,"PrioListOn","prefer listed targets",false,"rage")
+    Toggle(p,"PrioListForce","ignore everyone else",false,"rage")
+    Button(p, "add target under crosshair", function()
+        if curTarget then
+            U._prio = U._prio or {}
+            U._prio[curTarget.Name] = true
+            warn("[UE3 prio] added "..curTarget.Name)
+        else warn("[UE3 prio] no target") end
+    end,"rage")
+    Button(p, "clear priority list", function() U._prio = {}; warn("[UE3 prio] cleared") end,"rage")
+
+    PaneHeader(p, "shot safety")
+    Toggle(p,"RiotShield","skip targets behind shield",false,"rage")
+    Toggle(p,"AvoidKatana","skip katana deflect",false,"rage")
+    Toggle(p,"MinHPCheck","require min hitchance",false,"rage")
+    Slider(p,"ShotAttempts","retry attempts",2,1,8,1,"","rage")
 
     PaneHeader(p, "spatial attack (teleport / orbit / fake pos)")
     Dropdown(p,"AttackPos","position mode",{"Normal","TeleportAbove","Orbit","RandomTeleport","VoidSpam","FakePos"},"Normal","rage")
@@ -848,6 +876,61 @@ registerTab("esp", "E", function(p)
     Toggle(p,"WorldDrops","item drops",false,"esp")
     Toggle(p,"WorldChests","chests / crates",false,"esp")
     Toggle(p,"WorldWarps","warpstones",false,"esp")
+end)
+
+registerTab("visuals", "V", function(p)
+    PaneHeader(p, "feedback")
+    Toggle(p,"HitSoundOn","hit sound",false,"visuals")
+    Dropdown(p,"HitSoundPreset","hit sound preset",{"Rust","Metal","Tap","Beep","Custom"},"Rust","visuals")
+    Slider(p,"HitSoundVol","hit sound volume",1,0,3,0.1,"","visuals")
+    Slider(p,"HitSoundPitch","hit sound pitch",1,0.2,3,0.1,"","visuals")
+    Toggle(p,"KillSoundOn","kill sound",false,"visuals")
+    Dropdown(p,"KillSoundPreset","kill sound preset",{"Fatality","Ding","Kaboom","Custom"},"Fatality","visuals")
+
+    PaneHeader(p, "damage markers")
+    Toggle(p,"DmgMarkerOn","world-space damage numbers",false,"visuals")
+    Slider(p,"DmgMarkerDur","marker lifetime",0.7,0.2,3,0.05,"s","visuals")
+    Slider(p,"DmgMarkerFloat","float up (studs)",2,0,10,0.5,"","visuals")
+    Toggle(p,"DmgMarkerCrit","mark crits (head) differently",true,"visuals")
+
+    PaneHeader(p, "bullet tracers")
+    Toggle(p,"TracerOn","draw tracers from barrel to hit",false,"visuals")
+    Slider(p,"TracerDur","tracer lifetime",0.25,0.05,2,0.05,"s","visuals")
+    Slider(p,"TracerThick","tracer thickness",0.08,0.02,0.4,0.02,"","visuals")
+
+    PaneHeader(p, "target hud")
+    Toggle(p,"TargetHudOn","show target info panel",false,"visuals")
+    Dropdown(p,"TargetHudPos","hud position",{"TopRight","TopLeft","BottomRight","BottomLeft","Floating"},"TopRight","visuals")
+
+    PaneHeader(p, "world markers")
+    Toggle(p,"HitMarkerOn","hit marker (crosshair flash)",false,"visuals")
+    Dropdown(p,"HitMarkerStyle","style",{"Cross","Dot","Ring","Burst"},"Cross","visuals")
+
+    PaneHeader(p, "fake pos visualizer")
+    Toggle(p,"GhostBoxOn","show ghost of your fake position",false,"visuals")
+    Slider(p,"GhostAlpha","ghost transparency",0.5,0,1,0.05,"","visuals")
+    Toggle(p,"GhostOutline","outline only",true,"visuals")
+end)
+
+registerTab("skin", "S", function(p)
+    PaneHeader(p, "skin changer")
+    Toggle(p,"SkinOn","enable skin changer",false,"skin")
+    Dropdown(p,"SkinTarget","apply to",{"Self","Enemies","Everyone"},"Self","skin")
+    Dropdown(p,"SkinSlot","weapon slot",{"Primary","Melee","All"},"All","skin")
+    Dropdown(p,"SkinStyle","style",{"Solid","Gradient","Neon","Glass","Chrome","Rainbow"},"Solid","skin")
+    Slider(p,"SkinR","color R",186,0,255,1,"","skin")
+    Slider(p,"SkinG","color G",255,0,255,1,"","skin")
+    Slider(p,"SkinB","color B",0,0,255,1,"","skin")
+    Slider(p,"SkinTrans","transparency",0,0,1,0.05,"","skin")
+    Slider(p,"SkinReflect","reflectance",0,0,1,0.05,"","skin")
+    Toggle(p,"SkinHideMesh","hide mesh (handle only)",false,"skin")
+    Toggle(p,"SkinGlow","emission glow",false,"skin")
+
+    PaneHeader(p, "detectors")
+    Toggle(p,"StaffDetOn","staff detector",false,"skin")
+    Dropdown(p,"StaffAction","on detect",{"Notify","Leave","Evade"},"Notify","skin")
+    Toggle(p,"StaffScanName","match by display name",true,"skin")
+    Toggle(p,"StaffScanTag","match by developer tag",true,"skin")
 end)
 
 registerTab("world", "W", function(p)
@@ -1041,13 +1124,34 @@ local function bestHitbox(ch)
 end
 
 local function pickTarget()
-    local kk = K.RageKey; if not kk then return nil end
-    if O.KeyMode=="Hold" and not kk.state then return nil end
-    if O.KeyMode=="Toggle" and not kk.state then return nil end
+    local kk = K.RageKey
+    -- Silent aim ignores key mode entirely: if silent is on, we always pick a target.
+    -- Rage-only still respects the key (so you can press E to burst).
+    local silentBypass = T.Silent
+    if not silentBypass then
+        if not kk then return nil end
+        if O.KeyMode=="Hold" and not kk.state then return nil end
+        if O.KeyMode=="Toggle" and not kk.state then return nil end
+    end
     if T.LockTgt and curTarget and alive(curTarget) and enemy(curTarget) then return curTarget end
     local m = UIS:GetMouseLocation(); local prio = O.Prio; local best, bs
+    U._prio = U._prio or {}
     for _,p in ipairs(Players:GetPlayers()) do
         if p~=LP and alive(p) and enemy(p) then
+            if T.PrioListForce and not U._prio[p.Name] then continue end
+            -- skip targets behind a shield facing us
+            if T.RiotShield then
+                local ch = p.Character
+                local holding = ch and ch:FindFirstChildOfClass("Tool")
+                if holding and (holding.Name:lower():find("shield") or holding.Name:lower():find("riot")) then
+                    local hrp = ch:FindFirstChild("HumanoidRootPart")
+                    if hrp and U.Char.hrp then
+                        local toMe = (U.Char.hrp.Position - hrp.Position).Unit
+                        local faceAlign = hrp.CFrame.LookVector:Dot(toMe)
+                        if faceAlign > 0.3 then continue end
+                    end
+                end
+            end
             local pt = bestHitbox(p.Character)
             if pt then
                 local s,on = w2s(pt.Position); local d3 = (pt.Position-Camera.CFrame.Position).Magnitude
@@ -1065,6 +1169,8 @@ local function pickTarget()
                         elseif prio=="LowestHP" then local h=p.Character:FindFirstChildOfClass("Humanoid"); sc = h and h.Health or 100
                         elseif prio=="Distance" then sc=d3
                         else sc=math.random() end
+                        -- priority list bias: subtract a large bonus so listed names win unless they're far worse
+                        if T.PrioListOn and U._prio[p.Name] then sc = sc - 10000 end
                         if not bs or sc<bs then bs,best = sc,p end
                     end
                 end
@@ -1072,6 +1178,61 @@ local function pickTarget()
         end
     end
     return best
+end
+
+----------------------------------------------------------------
+-- FOV CIRCLE
+----------------------------------------------------------------
+local fovCircle = nil
+local function fovTick()
+    if T.FovVis and (T.RageOn or T.Silent) then
+        if not fovCircle then
+            fovCircle = Drawing.new("Circle")
+            fovCircle.Thickness = 1; fovCircle.NumSides = 64; fovCircle.Filled = false
+            D(fovCircle)
+        end
+        local vp = Camera.ViewportSize
+        fovCircle.Position = Vector2.new(vp.X/2, vp.Y/2)
+        fovCircle.Radius = O.Fov or 150
+        fovCircle.Color = ac()
+        fovCircle.Visible = true
+    else
+        if fovCircle then fovCircle.Visible = false end
+    end
+end
+
+----------------------------------------------------------------
+-- FIRE (auto / trigger)
+----------------------------------------------------------------
+local lastFireAt = 0
+local targetAcquiredAt = 0
+local prevTarget = nil
+local function doFire()
+    local now = os.clock(); local rate = 1/(O.FireRate or 8)
+    if now - lastFireAt < rate then return end
+    lastFireAt = now
+    Sum.shots = Sum.shots + 1
+    if T.AutoStop and U.Char.hrp then
+        pc(function() local v=U.Char.hrp.AssemblyLinearVelocity; U.Char.hrp.AssemblyLinearVelocity=Vector3.new(0,v.Y,0) end)
+    end
+    if T.CounterStrafe and U.counterStrafeOnFire then U.counterStrafeOnFire() end
+    pc(function() local t = LP.Character and LP.Character:FindFirstChildOfClass("Tool"); if t then t:Activate() end end)
+    pc(function() if mouse1press then mouse1press(); task.wait(); mouse1release() end end)
+end
+
+local function fireTick()
+    if not aimPos or not curTarget then
+        prevTarget = nil; targetAcquiredAt = 0; return
+    end
+    if curTarget ~= prevTarget then
+        prevTarget = curTarget
+        targetAcquiredAt = os.clock()
+    end
+    if T.AutoFire then doFire(); return end
+    if T.AutoShoot then
+        local wait = (O.AutoShootDelay or 40)/1000
+        if os.clock() - targetAcquiredAt >= wait then doFire() end
+    end
 end
 
 local function aimTick()
@@ -1193,7 +1354,14 @@ if mt and setreadonly then
 
         -- past here only runs with Silent/Rage on. Fast-reject non-fire remotes via cache.
         if not aimPos then return oldNc(self,...) end
-        if not isFireRemote(self) then return oldNc(self,...) end
+        -- HookAll bypasses the name filter: every RemoteEvent/RemoteFunction becomes a swap candidate.
+        -- Use when the game uses opaque names like "e", "r1", or hashed ids.
+        if not T.HookAll then
+            if not isFireRemote(self) then return oldNc(self,...) end
+        else
+            local cls = tostring(self.ClassName)
+            if not cls:find("Remote") then return oldNc(self,...) end
+        end
 
         local args = {...}
         local n = select("#", ...)
@@ -1550,6 +1718,100 @@ local function strafeRestoreTick()
     end)
 end
 
+-- lightweight sound trigger
+U._soundIds = {
+    hit = {Rust=131886985, Metal=3779005022, Tap=131961136, Beep=138080762},
+    kill = {Fatality=5466148869, Ding=3779305843, Kaboom=142472270},
+}
+local function playHitSound(kind)
+    if not kind then return end
+    local pool = U._soundIds[kind]; if not pool then return end
+    local preset = (kind=="hit") and (O.HitSoundPreset or "Rust") or (O.KillSoundPreset or "Fatality")
+    local id = pool[preset]; if not id then return end
+    task.spawn(function()
+        local s = Instance.new("Sound")
+        s.SoundId = "rbxassetid://"..id
+        s.Volume = (kind=="hit") and (O.HitSoundVol or 1) or 1
+        s.PlaybackSpeed = (kind=="hit") and (O.HitSoundPitch or 1) or 1
+        s.Parent = Workspace
+        s:Play()
+        s.Ended:Connect(function() s:Destroy() end)
+        task.delay(5, function() if s and s.Parent then s:Destroy() end end)
+    end)
+end
+
+-- damage marker (world-space text that floats up and fades)
+U._markers = {}
+local function spawnDamageMarker(pos, dmg, isCrit)
+    if not T.DmgMarkerOn then return end
+    local part = Instance.new("Part")
+    part.Size = Vector3.new(0.1,0.1,0.1); part.Transparency = 1; part.Anchored = true
+    part.CanCollide = false; part.CanQuery = false; part.CanTouch = false; part.Massless = true
+    part.CFrame = CFrame.new(pos)
+    local bb = Instance.new("BillboardGui"); bb.Size = UDim2.fromOffset(120,40)
+    bb.AlwaysOnTop = true; bb.StudsOffset = Vector3.new(0,0,0); bb.Parent = part
+    local lbl = Instance.new("TextLabel"); lbl.BackgroundTransparency=1; lbl.Size=UDim2.fromScale(1,1)
+    lbl.TextSize = isCrit and 22 or 16
+    applyFont(lbl, F.capFace, F.capEnum)
+    lbl.TextColor3 = isCrit and Color3.fromRGB(255,80,80) or Color3.fromRGB(255,220,120)
+    lbl.TextStrokeTransparency = 0; lbl.TextStrokeColor3 = Color3.new(0,0,0)
+    lbl.Text = ("-%d"):format(math.floor(dmg+0.5))
+    lbl.Parent = bb
+    pcall(function() part.Parent = Workspace end)
+    local dur = O.DmgMarkerDur or 0.7; local float = O.DmgMarkerFloat or 2
+    table.insert(U._markers, {part=part, lbl=lbl, bb=bb, t0=os.clock(), dur=dur, float=float, startY=pos.Y})
+end
+
+local function markerTick()
+    local now = os.clock()
+    for i=#U._markers,1,-1 do
+        local m = U._markers[i]
+        local a = (now-m.t0)/m.dur
+        if a >= 1 then pcall(function() m.part:Destroy() end); table.remove(U._markers,i)
+        else
+            pcall(function()
+                m.part.CFrame = CFrame.new(m.part.CFrame.X, m.startY + a*m.float, m.part.CFrame.Z)
+                m.lbl.TextTransparency = a
+                m.lbl.TextStrokeTransparency = a
+            end)
+        end
+    end
+end
+
+-- bullet tracer
+U._tracers = {}
+local function spawnTracer(fromPos, toPos)
+    if not T.TracerOn then return end
+    local part = Instance.new("Part")
+    local d = (toPos - fromPos); local dist = d.Magnitude
+    if dist < 0.1 then return end
+    part.Size = Vector3.new(O.TracerThick or 0.08, O.TracerThick or 0.08, dist)
+    part.CFrame = CFrame.lookAt(fromPos + d*0.5, toPos)
+    part.Anchored = true; part.CanCollide = false; part.CanQuery=false; part.CanTouch=false; part.Massless=true
+    part.Material = Enum.Material.Neon; part.Color = ac(); part.Transparency = 0.2
+    pcall(function() part.Parent = Workspace end)
+    table.insert(U._tracers, {part=part, t0=os.clock(), dur=O.TracerDur or 0.25})
+end
+local function tracerTick()
+    local now = os.clock()
+    for i=#U._tracers,1,-1 do
+        local t = U._tracers[i]
+        local a = (now - t.t0)/t.dur
+        if a >= 1 then pcall(function() t.part:Destroy() end); table.remove(U._tracers,i)
+        else pcall(function() t.part.Transparency = 0.2 + a*0.8 end) end
+    end
+end
+-- fire a tracer whenever our fire path runs
+local _origDoFireTracer = doFire
+doFire = function()
+    if T.TracerOn and aimPos and U.Char.hrp then
+        local tool = LP.Character and LP.Character:FindFirstChildOfClass("Tool")
+        local from = (tool and tool:FindFirstChild("Handle") and tool.Handle.Position) or U.Char.hrp.Position + Vector3.new(0,1,0)
+        spawnTracer(from, aimPos)
+    end
+    _origDoFireTracer()
+end
+
 local function hpTrackTick()
     local now = os.clock()
     for _,pl in ipairs(Players:GetPlayers()) do
@@ -1562,7 +1824,21 @@ local function hpTrackTick()
                     table.insert(U._dmgLog,{t=now,target=pl,dmg=dmg})
                     table.insert(U._dpsBucket,{t=now,dmg=dmg})
                     Sum.hits += 1
-                elseif last and hum.Health <= 0 and last > 0 then Sum.kills += 1 end
+                    -- feedback hooks: only when WE are the shooter (silent/rage active)
+                    if (T.Silent or T.RageOn) and pl == curTarget then
+                        if T.HitSoundOn then playHitSound("hit") end
+                        if T.DmgMarkerOn then
+                            local pt = bestHitbox and bestHitbox(pl.Character)
+                            if pt then
+                                local isCrit = (pt.Name == "Head")
+                                spawnDamageMarker(pt.Position + Vector3.new(0,2,0), dmg, isCrit and T.DmgMarkerCrit)
+                            end
+                        end
+                    end
+                elseif last and hum.Health <= 0 and last > 0 then
+                    Sum.kills += 1
+                    if (T.Silent or T.RageOn) and T.KillSoundOn then playHitSound("kill") end
+                end
                 U._hpLast[pl] = hum.Health
             end
         end
@@ -1818,6 +2094,449 @@ local function statusTick()
 end
 
 ----------------------------------------------------------------
+-- SKIN CHANGER (asset-map port + paint/transparency/reflect/glow)
+----------------------------------------------------------------
+-- Rivals weapon -> custom-skin asset map (ported from olivia's source)
+U.SKIN_MAP = {
+    Sniper = {
+        label = "Chamber",
+        bodyMeshIds = {"rbxassetid://95497877882755","rbxassetid://118920880889483","rbxassetid://80662423119419"},
+        removeMeshIds = {"rbxassetid://100168191352015","rbxassetid://82935541182957","rbxassetid://95388370230390","rbxassetid://84918196407550"},
+        replaceMeshId = "rbxassetid://98786413608787",
+        replaceTexId  = "rbxassetid://131686603013672",
+        replaceSize   = Vector3.new(0.025,0.025,0.025),
+        replaceOffset = Vector3.new(0,-0.25,0),
+    },
+    SniperOp = {
+        label = "Operator",
+        bodyMeshIds = {"rbxassetid://13188893115","rbxassetid://13188892761","rbxassetid://14778413014","rbxassetid://13188893017","rbxassetid://14774727092"},
+        removeMeshIds = {"rbxassetid://13188893310","rbxassetid://13188892855"},
+        magMeshIds = {"rbxassetid://13188892532","rbxassetid://13188892651"},
+        bodyReplaceMesh = "rbxassetid://132995629661821",
+        bodyReplaceTex  = "rbxassetid://80634410259243",
+        scopeReplaceMesh = "rbxassetid://103988563532751",
+        scopeReplaceTex  = "rbxassetid://136789986141252",
+        magReplaceMesh   = "rbxassetid://80074307887476",
+        magReplaceTex    = "rbxassetid://80634410259243",
+        replaceSize   = Vector3.new(0.3,0.3,0.3),
+        replaceOffset = Vector3.new(0,-0.25,0),
+        scopeOffset   = Vector3.new(0.175,0.5,0.005),
+        magOffset     = Vector3.new(0.7,0,0.05),
+    },
+    Daggers = {
+        label = "Jett",
+        sourceMeshIds   = {"rbxassetid://94772705561955"},
+        replaceMeshId   = "rbxassetid://128075492497238",
+        replaceTexId    = "rbxassetid://79246900644201",
+        replaceSize     = Vector3.new(0.03,0.03,0.03),
+        replaceRotation = Vector3.new(0,90,-90),
+        fallbackBodyNames = {"LeftBody","RightBody"},
+    },
+    Satchel = {
+        label = "Raze",
+        sourceMeshIds = {"rbxassetid://138805549853994","rbxassetid://125258747465100","rbxassetid://111319295872696","rbxassetid://129504437671598","rbxassetid://104440368867933"},
+        replaceMeshId   = "rbxassetid://129982008330139",
+        replaceTexId    = "rbxassetid://121713947189258",
+        replaceSize     = Vector3.new(0.5,0.5,0.5),
+        replaceRotation = Vector3.new(0,-90,0),
+    },
+    Reaver = {
+        label = "reaver",
+        sourceMeshIds = {"rbxassetid://85166039303292","rbxassetid://125674590013235","rbxassetid://97042702941502","rbxassetid://116723276788898","rbxassetid://99266754879173"},
+        replaceMeshId  = "rbxassetid://76054449109492",
+        replaceTexId   = "rbxassetid://117578984602503",
+        replaceSize    = Vector3.new(0.3,0.3,0.3),
+        replaceRotation= Vector3.new(0,90,0),
+        replaceOffset  = Vector3.new(0,0.5,0),
+    },
+    RPG = {
+        label = "RPG Raze",
+        bodyMeshIds = {"rbxassetid://17638908187","rbxassetid://17638908626"},
+        rocketMeshIds = {"rbxassetid://17638908803","rbxassetid://17638907818"},
+        bodyReplaceMesh = "rbxassetid://81554047161707",
+        bodyReplaceTex  = "rbxassetid://133257377819985",
+        replaceScale    = 0.5,
+        replaceRotation = Vector3.new(0,90,0),
+        replaceOffset   = Vector3.new(0.04,0,0),
+    },
+    Fists = {
+        label = "Agent",
+        leftPart = "LeftItem", rightPart = "RightItem",
+        leftMeshId  = "rbxassetid://120273083766829", leftTexId  = "rbxassetid://124608382264962",
+        rightMeshId = "rbxassetid://129220833982000", rightTexId = "rbxassetid://118482605175566",
+        meshScale   = Vector3.new(0.1,0.1,0.1),
+        leftRot     = Vector3.new(45,0,0),
+        rightRot    = Vector3.new(-45,0,0),
+    },
+    Bow = {
+        label = "Sova",
+        bodyMeshIds  = {"rbxassetid://116947825701555","rbxassetid://80510746199823"},
+        arrowMeshIds = {"rbxassetid://108027163190911","rbxassetid://114261802270550"},
+        bodyReplaceMesh  = "rbxassetid://80147707463344",
+        bodyReplaceTex   = "rbxassetid://87690225474067",
+        arrowReplaceMesh = "rbxassetid://97839236861642",
+        arrowReplaceTex  = "rbxassetid://82458179247269",
+        replaceSize = Vector3.new(0.25,0.25,0.25),
+    },
+    AR = {
+        label = "Vandal",
+        bodyMeshIds = {"rbxassetid://17661950733","rbxassetid://17661950585","rbxassetid://17662005180","rbxassetid://17662016762"},
+        boltMeshIds = {"rbxassetid://17661950452"},
+        magMeshIds  = {"rbxassetid://17662005301","rbxassetid://17662005453"},
+        bodyReplaceMesh = "rbxassetid://138100951261312",
+        bodyReplaceTex  = "rbxassetid://84167100219585",
+        magReplaceMesh  = "rbxassetid://92935167277909",
+        magReplaceTex   = "rbxassetid://84167100219585",
+        replaceSize   = Vector3.new(0.35,0.35,0.35),
+        replaceOffset = Vector3.new(0.1,-0.25,0.04),
+        magOffset     = Vector3.new(-0.135,-0.2,-0.03),
+    },
+    TripmineDice = {
+        label = "Subspace Tripmine (Custom Skin)",
+        meshIds = {"rbxassetid://5555691474","rbxassetid://5555691356"},
+        removeMeshId = "rbxassetid://13792525075",
+        scale = 3.35,
+    },
+    TripmineSpike = {
+        label = "Spike",
+        meshId = "rbxassetid://97754746098028",
+        removeMeshId = "rbxassetid://13792525075",
+        scale = 85,
+    },
+    Camera = {
+        label = "Camera",
+        sourceMeshIds = {"rbxassetid://17835823024","rbxassetid://17835823121","rbxassetid://17835823211"},
+        replaceMeshId  = "rbxassetid://112849634500139",
+        replaceTexId   = "rbxassetid://126465878813440",
+        replaceSize    = Vector3.new(0.5,0.5,0.5),
+        replaceRotation= Vector3.new(0,0,-90),
+    },
+    Sky = {
+        label = "sky",
+        sourceMeshIds = {"rbxassetid://140203670599306"},
+        replaceMeshId  = "rbxassetid://78577370691269",
+        replaceTexId   = "rbxassetid://130284287910497",
+        replaceSize    = Vector3.new(0.6,0.6,0.6),
+        replaceRotation= Vector3.new(0,90,0),
+    },
+    GrenadeRaze = {
+        label = "Grenade Raze",
+        sourceMeshIds = {"rbxassetid://87132852844264","rbxassetid://96681677373844","rbxassetid://121396126155803","rbxassetid://121842208464560"},
+        replaceMeshId = "rbxassetid://80612596590820",
+        replaceTexId  = "rbxassetid://123233413518598",
+        replaceSize   = Vector3.new(0.8,0.8,0.8),
+    },
+}
+
+-- fuzzy tool classifier: look at the tool name for a match
+U.SKIN_TOOL_KEYS = {
+    {pat="sniper",          key="Sniper"},
+    {pat="operator",        key="SniperOp"},
+    {pat="dagger",          key="Daggers"},
+    {pat="satchel",         key="Satchel"},
+    {pat="reaver",          key="Reaver"},
+    {pat="rpg",             key="RPG"},
+    {pat="fist",            key="Fists"},
+    {pat="bow",             key="Bow"},
+    {pat="assault",         key="AR"},
+    {pat="rifle",           key="AR"},
+    {pat="tripmine",        key="TripmineSpike"},
+    {pat="dice",            key="TripmineDice"},
+    {pat="camera",          key="Camera"},
+    {pat="sky",             key="Sky"},
+    {pat="grenade",         key="GrenadeRaze"},
+}
+
+local function _classifyTool(tool)
+    if not tool then return nil end
+    local n = (tool.Name or ""):lower()
+    for _,ent in ipairs(U.SKIN_TOOL_KEYS) do
+        if n:find(ent.pat, 1, true) then return ent.key end
+    end
+    return nil
+end
+
+local function _applySkinSpec(tool, spec)
+    if not tool or not spec then return end
+    local applied = tool:GetAttribute("UE3_SkinApplied")
+    if applied == spec.label then return end
+    for _,desc in ipairs(tool:GetDescendants()) do
+        pcall(function()
+            if desc:IsA("SpecialMesh") then
+                local mid = desc.MeshId
+                local shouldRemove = false
+                if spec.removeMeshIds then
+                    for _,rm in ipairs(spec.removeMeshIds) do if mid == rm then shouldRemove = true; break end end
+                end
+                if spec.removeMeshId and mid == spec.removeMeshId then shouldRemove = true end
+                if shouldRemove then desc.Parent = nil; return end
+                local matchBody = spec.bodyMeshIds and table.find(spec.bodyMeshIds, mid)
+                if matchBody and spec.bodyReplaceMesh then
+                    desc.MeshId = spec.bodyReplaceMesh
+                    if spec.bodyReplaceTex then desc.TextureId = spec.bodyReplaceTex end
+                    if spec.replaceSize then desc.Scale = spec.replaceSize end
+                    if spec.replaceOffset and desc.Parent and desc.Parent:IsA("BasePart") then desc.Offset = spec.replaceOffset end
+                    return
+                end
+                local matchSrc = spec.sourceMeshIds and table.find(spec.sourceMeshIds, mid)
+                if matchSrc and spec.replaceMeshId then
+                    desc.MeshId = spec.replaceMeshId
+                    if spec.replaceTexId then desc.TextureId = spec.replaceTexId end
+                    if spec.replaceSize then desc.Scale = spec.replaceSize end
+                end
+                local matchMag = spec.magMeshIds and table.find(spec.magMeshIds, mid)
+                if matchMag and spec.magReplaceMesh then
+                    desc.MeshId = spec.magReplaceMesh
+                    if spec.magReplaceTex then desc.TextureId = spec.magReplaceTex end
+                end
+                local matchArrow = spec.arrowMeshIds and table.find(spec.arrowMeshIds, mid)
+                if matchArrow and spec.arrowReplaceMesh then
+                    desc.MeshId = spec.arrowReplaceMesh
+                    if spec.arrowReplaceTex then desc.TextureId = spec.arrowReplaceTex end
+                end
+            end
+        end)
+    end
+    pcall(function() tool:SetAttribute("UE3_SkinApplied", spec.label) end)
+end
+
+U._skinSnap = {}
+U._skinOwned = {}
+
+local function _toolOf(pl)
+    local ch = pl and pl.Character
+    if not ch then return nil end
+    return ch:FindFirstChildOfClass("Tool")
+end
+
+local function _handleOf(tool)
+    return tool and tool:FindFirstChild("Handle") or nil
+end
+
+local function _skinSnapshot(tool)
+    if U._skinSnap[tool] then return end
+    local h = _handleOf(tool); if not h then return end
+    U._skinSnap[tool] = {
+        color   = h.Color,
+        mat     = h.Material,
+        trans   = h.Transparency,
+        reflect = h.Reflectance,
+    }
+end
+
+local function _skinRevert(tool)
+    local snap = U._skinSnap[tool]; if not snap then return end
+    local h = _handleOf(tool); if h then
+        pcall(function()
+            h.Color = snap.color; h.Material = snap.mat
+            h.Transparency = snap.trans; h.Reflectance = snap.reflect
+        end)
+        local glow = h:FindFirstChild("UE3Glow"); if glow then glow:Destroy() end
+    end
+    U._skinSnap[tool] = nil
+    U._skinOwned[tool] = nil
+end
+
+local function _paintHandle(tool)
+    local h = _handleOf(tool); if not h then return end
+    _skinSnapshot(tool); U._skinOwned[tool] = true
+    local style = O.SkinStyle or "Solid"
+    local col = Color3.fromRGB(tonumber(O.SkinR or 255) or 255, tonumber(O.SkinG or 80) or 80, tonumber(O.SkinB or 200) or 200)
+    local trans = tonumber(O.SkinTrans or 0) or 0
+    local reflect = tonumber(O.SkinReflect or 0) or 0
+    pcall(function()
+        h.Color = col; h.Transparency = trans; h.Reflectance = reflect
+        if style == "Neon" then h.Material = Enum.Material.Neon
+        elseif style == "Glass" then h.Material = Enum.Material.Glass
+        elseif style == "ForceField" then h.Material = Enum.Material.ForceField
+        elseif style == "Plastic" then h.Material = Enum.Material.Plastic
+        else h.Material = Enum.Material.SmoothPlastic end
+    end)
+    if O.SkinHideMesh then
+        for _,m in ipairs(h:GetChildren()) do if m:IsA("SpecialMesh") then pcall(function() m.TextureId = "" end) end end
+    end
+    if T.SkinGlow then
+        local glow = h:FindFirstChild("UE3Glow")
+        if not glow then
+            glow = Instance.new("PointLight"); glow.Name = "UE3Glow"
+            glow.Range = tonumber(O.SkinGlowRange or 8) or 8
+            glow.Brightness = tonumber(O.SkinGlowBright or 2) or 2
+            glow.Color = col; glow.Parent = h
+        else glow.Color = col; glow.Range = tonumber(O.SkinGlowRange or 8) or 8 end
+    else
+        local glow = h:FindFirstChild("UE3Glow"); if glow then glow:Destroy() end
+    end
+end
+
+local function _skinApply(tool)
+    if not tool then return end
+    _paintHandle(tool)
+    if O.SkinUseAssetMap then
+        local key = _classifyTool(tool)
+        local spec = key and U.SKIN_MAP[key]
+        if spec then _applySkinSpec(tool, spec) end
+    end
+end
+
+local function skinTick()
+    local target = O.SkinTarget or "Self"
+    if target == "Self" then
+        local tool = _toolOf(LP)
+        if tool then _skinApply(tool) end
+    else
+        for _,pl in ipairs(Players:GetPlayers()) do
+            local tool = _toolOf(pl); if tool then _skinApply(tool) end
+        end
+    end
+end
+
+----------------------------------------------------------------
+-- STAFF DETECTOR (scan GetChildren of PlayerGui / Backpack for admin/staff tools or badges)
+----------------------------------------------------------------
+U._staffSeen = {}
+local STAFF_KEYS = {"admin","mod","staff","owner","developer","mdlg","mdlgame"}
+local function _nameHasStaffKey(name)
+    if not name then return false end
+    local n = name:lower()
+    for _,k in ipairs(STAFF_KEYS) do if n:find(k,1,true) then return true end end
+    return false
+end
+
+local function staffTick()
+    for _,pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LP then
+            local flagged = false
+            local bp = pl:FindFirstChildOfClass("Backpack")
+            if bp then for _,it in ipairs(bp:GetChildren()) do if _nameHasStaffKey(it.Name) then flagged=true; break end end end
+            if not flagged and pl.Character then
+                for _,it in ipairs(pl.Character:GetChildren()) do if it:IsA("Tool") and _nameHasStaffKey(it.Name) then flagged=true; break end end
+            end
+            if flagged and not U._staffSeen[pl] then
+                U._staffSeen[pl] = true
+                warn(("[UE3 staff] flagged: %s"):format(pl.Name))
+                local act = O.StaffAction or "Notify"
+                if act == "Leave" then pcall(function() Players.LocalPlayer:Kick("staff detected") end)
+                elseif act == "Evade" then
+                    T.AAOn = true
+                    local hrp = U.Char and U.Char.hrp
+                    if hrp then pcall(function() hrp.CFrame = hrp.CFrame + Vector3.new(0, 500, 0) end) end
+                end
+            elseif not flagged and U._staffSeen[pl] then
+                U._staffSeen[pl] = nil
+            end
+        end
+    end
+end
+
+----------------------------------------------------------------
+-- TARGET HUD (floating panel showing current target info)
+----------------------------------------------------------------
+U._thud = nil
+local function _buildTargetHud()
+    if U._thud then return U._thud end
+    local sg = Instance.new("ScreenGui"); sg.Name = "UE3_THUD"; sg.IgnoreGuiInset = true; sg.ResetOnSpawn = false
+    local f = Instance.new("Frame"); f.Size = UDim2.fromOffset(180, 76)
+    f.Position = UDim2.new(0, 20, 0.5, -38); f.BackgroundColor3 = Color3.fromRGB(16,16,20)
+    f.BackgroundTransparency = 0.15; f.BorderSizePixel = 0
+    local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0,6); corner.Parent = f
+    local stroke = Instance.new("UIStroke"); stroke.Color = ac(); stroke.Thickness = 1; stroke.Parent = f
+    local name = Instance.new("TextLabel"); name.BackgroundTransparency=1
+    name.Position = UDim2.fromOffset(10,6); name.Size = UDim2.new(1,-20,0,16)
+    applyFont(name, F.capFace, F.capEnum); name.TextSize = 13; name.TextXAlignment = Enum.TextXAlignment.Left
+    name.TextColor3 = Color3.fromRGB(230,230,240); name.Text = "--"; name.Parent = f
+    local hp = Instance.new("TextLabel"); hp.BackgroundTransparency=1
+    hp.Position = UDim2.fromOffset(10,26); hp.Size = UDim2.new(1,-20,0,14)
+    applyFont(hp, F.capFace, F.capEnum); hp.TextSize = 11; hp.TextXAlignment = Enum.TextXAlignment.Left
+    hp.TextColor3 = Color3.fromRGB(180,180,200); hp.Text = ""; hp.Parent = f
+    local dist = Instance.new("TextLabel"); dist.BackgroundTransparency=1
+    dist.Position = UDim2.fromOffset(10,42); dist.Size = UDim2.new(1,-20,0,14)
+    applyFont(dist, F.capFace, F.capEnum); dist.TextSize = 11; dist.TextXAlignment = Enum.TextXAlignment.Left
+    dist.TextColor3 = Color3.fromRGB(180,180,200); dist.Text = ""; dist.Parent = f
+    local bar = Instance.new("Frame"); bar.Position = UDim2.fromOffset(10,60); bar.Size = UDim2.fromOffset(160,4)
+    bar.BackgroundColor3 = Color3.fromRGB(40,40,50); bar.BorderSizePixel = 0; bar.Parent = f
+    local fill = Instance.new("Frame"); fill.Size = UDim2.fromScale(1,1); fill.BackgroundColor3 = ac(); fill.BorderSizePixel=0; fill.Parent = bar
+    pcall(function() sg.Parent = game:GetService("CoreGui") end)
+    f.Parent = sg
+    U._thud = {gui=sg, name=name, hp=hp, dist=dist, fill=fill, stroke=stroke}
+    return U._thud
+end
+local function _killTargetHud()
+    if U._thud then pcall(function() U._thud.gui:Destroy() end); U._thud = nil end
+end
+local function targetHudTick()
+    local h = _buildTargetHud()
+    if not curTarget or not curTarget.Character then
+        h.name.Text = "--"; h.hp.Text = ""; h.dist.Text = ""; h.fill.Size = UDim2.fromScale(0,1); return
+    end
+    local hum = curTarget.Character:FindFirstChildOfClass("Humanoid")
+    local hrp = curTarget.Character:FindFirstChild("HumanoidRootPart")
+    local myh = U.Char and U.Char.hrp
+    h.name.Text = curTarget.Name
+    if hum then
+        local pct = (hum.MaxHealth > 0) and (hum.Health/hum.MaxHealth) or 0
+        h.hp.Text = ("hp %d / %d"):format(math.floor(hum.Health+0.5), math.floor(hum.MaxHealth+0.5))
+        h.fill.Size = UDim2.fromScale(math.clamp(pct,0,1), 1)
+        h.fill.BackgroundColor3 = (pct<0.33) and Color3.fromRGB(230,70,70) or (pct<0.66) and Color3.fromRGB(230,180,70) or ac()
+    else h.hp.Text = ""; h.fill.Size = UDim2.fromScale(0,1) end
+    if hrp and myh then h.dist.Text = ("%d studs"):format((hrp.Position - myh.Position).Magnitude) end
+    h.stroke.Color = ac()
+end
+
+----------------------------------------------------------------
+-- HIT MARKER (brief crosshair flash on registered hit)
+----------------------------------------------------------------
+U._hmGui = nil
+U._hmUntil = 0
+local function _buildHitMarker()
+    if U._hmGui then return U._hmGui end
+    local sg = Instance.new("ScreenGui"); sg.Name="UE3_HM"; sg.IgnoreGuiInset=true; sg.ResetOnSpawn=false
+    local frame = Instance.new("Frame"); frame.AnchorPoint=Vector2.new(0.5,0.5)
+    frame.Position = UDim2.fromScale(0.5,0.5); frame.Size = UDim2.fromOffset(16,16)
+    frame.BackgroundTransparency = 1; frame.Visible = false; frame.Parent = sg
+    for i=1,4 do
+        local b = Instance.new("Frame"); b.BackgroundColor3 = ac(); b.BorderSizePixel = 0
+        if i==1 then b.Position=UDim2.fromOffset(0,0); b.Size=UDim2.fromOffset(6,2)
+        elseif i==2 then b.Position=UDim2.fromOffset(10,0); b.Size=UDim2.fromOffset(6,2)
+        elseif i==3 then b.Position=UDim2.fromOffset(0,14); b.Size=UDim2.fromOffset(6,2)
+        else b.Position=UDim2.fromOffset(10,14); b.Size=UDim2.fromOffset(6,2) end
+        b.Parent = frame
+    end
+    pcall(function() sg.Parent = game:GetService("CoreGui") end)
+    U._hmGui = {gui=sg, frame=frame}
+    return U._hmGui
+end
+-- flash trigger: wrap hpTrackTick's hit detection via public helper
+U.HitMarkerFlash = function() U._hmUntil = os.clock() + (tonumber(O.HitMarkerDur or 0.15) or 0.15) end
+local function hitMarkerTick()
+    local m = _buildHitMarker()
+    m.frame.Visible = (os.clock() < U._hmUntil)
+end
+-- also flash from damage path
+local _origPlayHit = playHitSound
+playHitSound = function(kind)
+    _origPlayHit(kind)
+    if kind == "hit" and T.HitMarkerOn then U.HitMarkerFlash() end
+end
+
+----------------------------------------------------------------
+-- GHOST BOX (visualize fake-position decoy for FakePos mode)
+----------------------------------------------------------------
+U._ghostPart = nil
+local function _killGhost() if U._ghostPart then pcall(function() U._ghostPart:Destroy() end); U._ghostPart=nil end end
+local function ghostBoxTick()
+    if (O.AttackPos or "Normal") ~= "FakePos" or not spatialFakeReal then _killGhost(); return end
+    if not U._ghostPart or not U._ghostPart.Parent then
+        local p = Instance.new("Part"); p.Anchored=true; p.CanCollide=false; p.CanQuery=false; p.CanTouch=false; p.Massless=true
+        p.Size = Vector3.new(2, 5, 2); p.Material = Enum.Material.ForceField
+        p.Transparency = 0.5; p.Color = ac()
+        pcall(function() p.Parent = Workspace end)
+        local box = Instance.new("SelectionBox"); box.Adornee = p; box.LineThickness = 0.04; box.Color3 = ac(); box.Parent = p
+        U._ghostPart = p
+    end
+    pcall(function() U._ghostPart.CFrame = CFrame.new(spatialFakeReal); U._ghostPart.Color = ac() end)
+end
+
+----------------------------------------------------------------
 -- ACTIVE-LIST SCHEDULER
 ----------------------------------------------------------------
 -- entries: {name, kind="frame"|"hz"|"gated", hz=, fn=, pred=, nextAt=0, tier=1..3}
@@ -1829,6 +2548,8 @@ local Entries = {
     {name="status",   kind="hz",    tier=1, hz=10, fn=statusTick, pred=function() return true end},
     {name="fps",      kind="frame", tier=1, fn=fpsTick, pred=function() return true end},
     {name="aim",      kind="frame", tier=2, fn=aimTick, pred=function() return T.RageOn or T.Silent end},
+    {name="fire",     kind="frame", tier=2, fn=fireTick, pred=function() return T.AutoFire or T.AutoShoot end},
+    {name="fovvis",   kind="hz",    tier=2, hz=10, fn=fovTick, pred=function() return T.FovVis end},
     {name="aa",       kind="frame", tier=2, fn=aaTick, pred=function() return T.AAOn end},
     {name="world",    kind="hz",    tier=2, hz=5, fn=worldTick, pred=function() return T.NoFog or T.FB or T.CFov end},
     {name="move",     kind="hz",    tier=2, hz=10, fn=moveTick, pred=function() return T.WsOn or T.JpOn or T.Noclip end},
@@ -1838,6 +2559,13 @@ local Entries = {
     {name="hp",       kind="hz",    tier=3, hz=10, fn=hpTrackTick, pred=function() return T.EspHealth end},
     {name="bt",       kind="hz",    tier=3, hz=30, fn=function() for _,p in ipairs(Players:GetPlayers()) do if p~=LP then bt_push(p) end end end, pred=function() return T.BTOn end},
     {name="ragePos",  kind="hz",    tier=2, hz=60, fn=ragePosTick, pred=function() return T.RageOn and (O.AttackPos or "Normal") ~= "Normal" and aimPos end},
+    {name="marker",   kind="frame", tier=3, fn=markerTick, pred=function() return #U._markers>0 end},
+    {name="tracer",   kind="frame", tier=3, fn=tracerTick, pred=function() return #U._tracers>0 end},
+    {name="skin",     kind="hz",    tier=3, hz=4,  fn=function() skinTick() end, pred=function() return T.SkinOn end},
+    {name="staff",    kind="hz",    tier=3, hz=2,  fn=function() staffTick() end, pred=function() return T.StaffDetectOn end},
+    {name="thud",     kind="hz",    tier=3, hz=10, fn=function() targetHudTick() end, pred=function() return T.TargetHudOn end},
+    {name="hitmark",  kind="frame", tier=3, fn=function() hitMarkerTick() end, pred=function() return T.HitMarkerOn end},
+    {name="ghost",    kind="hz",    tier=3, hz=20, fn=function() ghostBoxTick() end, pred=function() return T.GhostBoxOn and (O.AttackPos or "Normal") == "FakePos" end},
 }
 
 local function dueGated(now, name) return true, function() end end
