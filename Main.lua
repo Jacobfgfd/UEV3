@@ -125,24 +125,26 @@ local function w2s(v) local p,on=Camera:WorldToViewportPoint(v); return Vector2.
 -- PALETTE / FONTS
 ----------------------------------------------------------------
 local P = {
-    bg      = Color3.fromRGB(11,13,16),
-    panel   = Color3.fromRGB(18,21,26),
-    row     = Color3.fromRGB(23,27,33),
-    hover   = Color3.fromRGB(30,35,42),
-    line    = Color3.fromRGB(35,40,47),
-    tx      = Color3.fromRGB(230,233,238),
-    dim     = Color3.fromRGB(138,146,158),
+    bg      = Color3.fromRGB(7,8,11),
+    panel   = Color3.fromRGB(13,15,19),
+    panel2  = Color3.fromRGB(16,19,24),
+    row     = Color3.fromRGB(19,22,28),
+    hover   = Color3.fromRGB(27,31,38),
+    line    = Color3.fromRGB(32,37,45),
+    tx      = Color3.fromRGB(235,238,243),
+    dim     = Color3.fromRGB(128,136,148),
     rd      = Color3.fromRGB(228,86,96),
     yw      = Color3.fromRGB(230,180,60),
     accents = {
-        lime    = Color3.fromRGB(186,255,0),
+        violet  = Color3.fromRGB(150,110,255),
         magenta = Color3.fromRGB(240,80,180),
-        amber   = Color3.fromRGB(255,170,40),
         cyan    = Color3.fromRGB(80,210,255),
+        lime    = Color3.fromRGB(186,255,0),
+        amber   = Color3.fromRGB(255,170,40),
         red     = Color3.fromRGB(240,70,80),
     },
 }
-local accentKeys = {"lime","magenta","amber","cyan","red"}
+local accentKeys = {"violet","magenta","cyan","lime","amber","red"}
 local accentIdx = 1
 local function ac() return P.accents[accentKeys[accentIdx]] end
 
@@ -973,6 +975,145 @@ registerTab("world", "W", function(p)
     Toggle(p,"FpsCap","frame limiter",false,"world")
     Slider(p,"FpsCapV","limit",120,30,240,5,"","world")
     Toggle(p,"Watermark","watermark",true,"world")
+end)
+
+----------------------------------------------------------------
+-- EXTRAS TAB (feature parity surface mapped to originals)
+----------------------------------------------------------------
+registerTab("extras", "X", function(p)
+    PaneHeader(p, "aim extensions")
+    Toggle(p,"Trigger","triggerbot",false,"extras")
+    Slider(p,"TriggerCd","trigger cooldown",0.1,0.02,1,0.02,"s","extras")
+    Slider(p,"TriggerRange","trigger range",500,50,1500,25,"","extras")
+    Dropdown(p,"TargetPriority","target priority",{"Closest","LowestHP","FOV","Crosshair"},"Closest","extras")
+    Toggle(p,"AutoPeek","auto peek",false,"extras")
+    Slider(p,"AutoPeekDist","peek distance",8,2,40,0.5,"s","extras")
+    Keybind(p,"AutoPeekKey","peek key",Enum.KeyCode.E,"extras")
+    Toggle(p,"AutoPrefire","auto prefire",false,"extras")
+    Slider(p,"PrefireAngle","prefire angle",15,5,45,1,"°","extras")
+
+    PaneHeader(p, "anti-aim extensions")
+    Dropdown(p,"AAYawMode","yaw mode",{"None","Random","Spin","Backwards","Left","Right","Jitter","Sway","Custom"},"None","extras")
+    Slider(p,"AAYawCustom","custom yaw",0,-180,180,1,"°","extras")
+    Dropdown(p,"AAPitchMode","pitch mode",{"None","Up","Down","Zero","Random"},"None","extras")
+    Toggle(p,"Spinbot","spinbot",false,"extras")
+    Slider(p,"SpinSpd","spin speed",360,60,1440,30,"°/s","extras")
+    Toggle(p,"FakeLag","fake lag",false,"extras")
+    Slider(p,"FakeLagTicks","fake lag ticks",3,1,14,1,"","extras")
+    Toggle(p,"HitboxDesync","hitbox orientation desync",false,"extras")
+
+    PaneHeader(p, "procedural crosshair")
+    Toggle(p,"CrossOn","crosshair",false,"extras")
+    Dropdown(p,"CrossStyle","style",{"Plus","Dot","Circle","T","Gap","Square"},"Plus","extras")
+    Slider(p,"CrossSize","size",8,2,40,1,"px","extras")
+    Slider(p,"CrossGap","gap",4,0,20,1,"px","extras")
+    Slider(p,"CrossThick","thickness",1,1,6,1,"px","extras")
+    Toggle(p,"CrossOutline","outline",true,"extras")
+    Toggle(p,"HeadDot","head dot",false,"extras")
+    Slider(p,"HeadDotSize","head dot size",3,1,10,1,"px","extras")
+
+    PaneHeader(p, "world lighting modulation")
+    Toggle(p,"Ambient","ambient override",false,"extras")
+    Slider(p,"AmbientR","ambient r",128,0,255,1,"","extras")
+    Slider(p,"AmbientG","ambient g",128,0,255,1,"","extras")
+    Slider(p,"AmbientB","ambient b",128,0,255,1,"","extras")
+    Toggle(p,"OutAmbient","outdoor ambient override",false,"extras")
+    Toggle(p,"FogOverride","fog override",false,"extras")
+    Slider(p,"FogEnd","fog end",10000,50,10000,50,"","extras")
+    Toggle(p,"AtmOn","atmosphere override",false,"extras")
+    Slider(p,"AtmDensity","atmosphere density",0.3,0,1,0.01,"","extras")
+    Toggle(p,"CCOn","color correction",false,"extras")
+    Slider(p,"CCSat","saturation",0,-1,1,0.05,"","extras")
+    Slider(p,"CCContrast","contrast",0,-1,1,0.05,"","extras")
+    Slider(p,"CCBright","brightness",0,-1,1,0.05,"","extras")
+
+    PaneHeader(p, "esp extended")
+    Toggle(p,"EspSkeleton","skeleton",false,"extras")
+    Toggle(p,"EspArmor","armor bar",false,"extras")
+    Toggle(p,"EspWeapon","weapon name",false,"extras")
+    Toggle(p,"EspArrow","off-screen arrow",false,"extras")
+    Slider(p,"EspArrowRad","arrow radius",180,80,400,10,"px","extras")
+    Toggle(p,"EspDistance","distance text",false,"extras")
+    Toggle(p,"EspSight","line of sight tint",false,"extras")
+    Toggle(p,"ChamsAsync","async wallcheck chams",false,"extras")
+    Dropdown(p,"ChamsStyle","chams style",{"Solid","Flat","Glow","ForceField","Wire"},"Solid","extras")
+
+    PaneHeader(p, "tracers suite")
+    Toggle(p,"TracerOn","bullet tracer",false,"extras")
+    Slider(p,"TracerThick","tracer thickness",0.08,0.02,0.4,0.01,"","extras")
+    Slider(p,"TracerDur","tracer duration",0.25,0.05,2,0.05,"s","extras")
+    Toggle(p,"HitMarkerOn","hit marker",false,"extras")
+    Slider(p,"HitMarkerDur","hit marker duration",0.15,0.05,0.6,0.01,"s","extras")
+
+    PaneHeader(p, "exploits suite")
+    Toggle(p,"InfStamina","infinite stamina",false,"extras")
+    Toggle(p,"FastReload","fast reload",false,"extras")
+    Toggle(p,"InstantHit","instant hit",false,"extras")
+    Toggle(p,"WalkOnWater","walk on water",false,"extras")
+    Toggle(p,"AntiAim","anti-aim master",false,"extras")
+    Toggle(p,"ClientFreeze","client-only freeze enemy",false,"extras")
+
+    PaneHeader(p, "staff detector")
+    Toggle(p,"StaffDetectOn","staff detector",false,"extras")
+    Dropdown(p,"StaffAction","on detect",{"Notify","Leave","Evade","ServerHop"},"Notify","extras")
+
+    PaneHeader(p, "fake position engine")
+    Toggle(p,"GhostBoxOn","ghost box visualizer",false,"extras")
+    Dropdown(p,"AttackPos","attack position",{"Normal","TeleportAbove","Orbit","RandomTeleport","VoidSpam","FakePos"},"Normal","extras")
+    Slider(p,"OrbitRadius","orbit radius",10,2,40,0.5,"s","extras")
+    Slider(p,"OrbitSpd","orbit speed",2,0.2,10,0.2,"","extras")
+    Slider(p,"TPAboveDist","tp-above height",8,3,30,0.5,"s","extras")
+    Slider(p,"RandTPRadius","random-tp radius",15,5,40,0.5,"s","extras")
+
+    PaneHeader(p, "config / menu")
+    Keybind(p,"MenuKey","toggle menu",Enum.KeyCode.RightShift,"extras")
+    Dropdown(p,"ConfigSlot","config slot",{"1","2","3","4","5"},"1","extras")
+    Button(p,"save config", function()
+        if writefile then pcall(function() writefile("UE3_cfg_"..(O.ConfigSlot or "1")..".json", HttpService:JSONEncode({T=T,O=O})) end) end
+    end,"extras")
+    Button(p,"load config", function()
+        if readfile then pcall(function()
+            local raw = readfile("UE3_cfg_"..(O.ConfigSlot or "1")..".json")
+            local decoded = HttpService:JSONDecode(raw)
+            for k,v in pairs(decoded.T or {}) do T[k]=v end
+            for k,v in pairs(decoded.O or {}) do O[k]=v end
+        end) end
+    end,"extras")
+    Button(p,"server hop", function()
+        pcall(function()
+            local TS = game:GetService("TeleportService")
+            TS:Teleport(game.PlaceId, LP)
+        end)
+    end,"extras")
+    Button(p,"rejoin server", function()
+        pcall(function()
+            local TS = game:GetService("TeleportService")
+            TS:TeleportToPlaceInstance(game.PlaceId, game.JobId, LP)
+        end)
+    end,"extras")
+    Toggle(p,"RainbowOn","rainbow accent",false,"extras")
+    Slider(p,"RainbowSpd","rainbow speed",0.2,0.05,2,0.05,"","extras")
+
+    PaneHeader(p, "translocator")
+    Toggle(p,"TranslocOn","translocator",false,"extras")
+    Keybind(p,"TranslocMarkKey","drop mark",Enum.KeyCode.G,"extras")
+    Keybind(p,"TranslocBlinkKey","blink to mark",Enum.KeyCode.H,"extras")
+    Dropdown(p,"TranslocMode","blink mode",{"Instant","Smooth","Echo"},"Instant","extras")
+    Slider(p,"TranslocTime","smooth time",0.15,0.05,1,0.05,"s","extras")
+    Slider(p,"TranslocCd","cooldown",0.4,0,3,0.05,"s","extras")
+    Toggle(p,"TranslocShowMark","show mark",true,"extras")
+    Toggle(p,"TranslocClearVel","zero velocity on blink",true,"extras")
+    Button(p,"clear mark", function()
+        if U._translocMarkPart then pcall(function() U._translocMarkPart:Destroy() end); U._translocMarkPart=nil end
+        U._translocMark=nil
+    end,"extras")
+
+    PaneHeader(p, "anti-translocator")
+    Toggle(p,"AntiTranslocOn","anti-translocator",false,"extras")
+    Slider(p,"AntiTranslocDist","jump threshold",25,8,120,1,"s","extras")
+    Dropdown(p,"AntiTranslocAct","on detect",{"Notify","Trace","Ignore"},"Trace","extras")
+    Slider(p,"AntiTranslocTrace","trace duration",2,0.5,10,0.5,"s","extras")
+    Toggle(p,"AntiTranslocHUD","show on HUD",true,"extras")
 end)
 
 ----------------------------------------------------------------
@@ -2390,6 +2531,33 @@ local function skinTick()
     end
 end
 
+-- Equip-swap: fire immediately on tool equip + runtime mesh additions
+U._skinToolConns = {}
+local function _bindToolForSkin(tool)
+    if not tool or not tool:IsA("Tool") then return end
+    if U._skinToolConns[tool] then return end
+    local conns = {}
+    _skinApply(tool)
+    table.insert(conns, tool.DescendantAdded:Connect(function(_)
+        if T.SkinOn then task.defer(function() _skinApply(tool) end) end
+    end))
+    table.insert(conns, tool.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            for _,c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+            U._skinToolConns[tool] = nil
+            _skinRevert(tool)
+        end
+    end))
+    U._skinToolConns[tool] = conns
+end
+local function _bindCharForSkin(ch)
+    if not ch then return end
+    C(ch.ChildAdded:Connect(function(c) if T.SkinOn and c:IsA("Tool") then _bindToolForSkin(c) end end))
+    for _,c in ipairs(ch:GetChildren()) do if c:IsA("Tool") then _bindToolForSkin(c) end end
+end
+if LP.Character then _bindCharForSkin(LP.Character) end
+C(LP.CharacterAdded:Connect(_bindCharForSkin))
+
 ----------------------------------------------------------------
 -- STAFF DETECTOR (scan GetChildren of PlayerGui / Backpack for admin/staff tools or badges)
 ----------------------------------------------------------------
@@ -2537,6 +2705,222 @@ local function ghostBoxTick()
 end
 
 ----------------------------------------------------------------
+-- RAINBOW ACCENT (pulse ac() through HSV)
+----------------------------------------------------------------
+U._rainbowH = 0
+local function rainbowTick(dt)
+    U._rainbowH = (U._rainbowH + (tonumber(O.RainbowSpd or 0.2) or 0.2) * (dt or 1/60)) % 1
+    local col = Color3.fromHSV(U._rainbowH, O.RainbowSat or 0.9, O.RainbowVal or 1)
+    if U._setAccent then pcall(U._setAccent, col) end
+end
+
+----------------------------------------------------------------
+-- NO-RECOIL (zero camera-CFrame delta applied by viewmodel)
+----------------------------------------------------------------
+U._camLastCF = nil
+local function noRecoilTick()
+    local cam = Workspace.CurrentCamera; if not cam then return end
+    if not T.NoRecoil then U._camLastCF = cam.CFrame; return end
+    local tool = LP.Character and LP.Character:FindFirstChildOfClass("Tool")
+    if not tool then U._camLastCF = cam.CFrame; return end
+    if U._camLastCF then
+        local d = cam.CFrame.Rotation * U._camLastCF.Rotation:Inverse()
+        local pitch = math.asin(-d.LookVector.Y)
+        if math.abs(pitch) > 0.001 and pitch > 0 then
+            pcall(function() cam.CFrame = CFrame.new(cam.CFrame.Position) * (U._camLastCF.Rotation) end)
+        end
+    end
+    U._camLastCF = cam.CFrame
+end
+
+----------------------------------------------------------------
+-- BUNNYHOP (auto-jump while Space held and grounded)
+----------------------------------------------------------------
+local function bhopTick()
+    if not T.Bhop then return end
+    local hum = U.Char and U.Char.hum; if not hum then return end
+    if hum:GetState() == Enum.HumanoidStateType.Landed or hum.FloorMaterial ~= Enum.Material.Air then
+        if UIS:IsKeyDown(Enum.KeyCode.Space) then pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end) end
+    end
+end
+
+----------------------------------------------------------------
+-- AIR-STALL (zero vertical vel while key held)
+----------------------------------------------------------------
+local function airStallTick()
+    if not T.AirStall then return end
+    local hrp = U.Char and U.Char.hrp; if not hrp then return end
+    if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then
+        pcall(function() hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z) end)
+    end
+end
+
+----------------------------------------------------------------
+-- TRIGGERBOT (fire when crosshair falls on enemy)
+----------------------------------------------------------------
+local function triggerTick()
+    if not T.Trigger then return end
+    local cam = Workspace.CurrentCamera; if not cam then return end
+    local origin = cam.CFrame.Position
+    local dir = cam.CFrame.LookVector * (tonumber(O.TriggerRange or 500) or 500)
+    local params = RaycastParams.new(); params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {LP.Character, cam}
+    local hit = Workspace:Raycast(origin, dir, params)
+    if hit and hit.Instance then
+        local ch = hit.Instance:FindFirstAncestorOfClass("Model")
+        local pl = ch and Players:GetPlayerFromCharacter(ch)
+        if pl and pl ~= LP then
+            local now = os.clock(); U._trigLast = U._trigLast or 0
+            if now - U._trigLast >= (tonumber(O.TriggerCd or 0.1) or 0.1) then
+                U._trigLast = now
+                if doFire then pcall(doFire) end
+            end
+        end
+    end
+end
+
+----------------------------------------------------------------
+-- TRANSLOCATOR (mark + blink back to mark)
+----------------------------------------------------------------
+U._translocMark = nil
+U._translocMarkPart = nil
+U._translocLast = 0
+U._translocTraces = {}
+
+local function _drawTranslocMark()
+    if not T.TranslocShowMark then
+        if U._translocMarkPart then pcall(function() U._translocMarkPart:Destroy() end); U._translocMarkPart=nil end
+        return
+    end
+    if not U._translocMark then return end
+    if not U._translocMarkPart or not U._translocMarkPart.Parent then
+        local p = Instance.new("Part"); p.Anchored=true; p.CanCollide=false; p.CanQuery=false; p.CanTouch=false
+        p.Size = Vector3.new(2,0.1,2); p.Material = Enum.Material.Neon; p.Color = ac(); p.Transparency = 0.3
+        pcall(function() p.Parent = Workspace end)
+        local sb = Instance.new("SelectionBox"); sb.Adornee = p; sb.LineThickness = 0.05; sb.Color3 = ac(); sb.Parent = p
+        local bb = Instance.new("BillboardGui"); bb.Size = UDim2.fromOffset(80,24); bb.StudsOffset = Vector3.new(0,2,0); bb.AlwaysOnTop = true; bb.Parent = p
+        local lbl = Instance.new("TextLabel"); lbl.BackgroundTransparency=1; lbl.Size=UDim2.fromScale(1,1)
+        applyFont(lbl, F.capFace, F.capEnum); lbl.TextSize = 12; lbl.TextColor3 = ac(); lbl.Text = "mark"; lbl.Parent = bb
+        U._translocMarkPart = p
+    end
+    pcall(function() U._translocMarkPart.CFrame = U._translocMark end)
+end
+
+local function _translocDropMark()
+    local hrp = U.Char and U.Char.hrp; if not hrp then return end
+    U._translocMark = hrp.CFrame
+    _drawTranslocMark()
+end
+
+local function _translocBlink()
+    if not U._translocMark then return end
+    local hrp = U.Char and U.Char.hrp; if not hrp then return end
+    local now = os.clock(); local cd = tonumber(O.TranslocCd or 0.4) or 0.4
+    if now - U._translocLast < cd then return end
+    U._translocLast = now
+    local mode = O.TranslocMode or "Instant"
+    local fromCF = hrp.CFrame; local toCF = U._translocMark
+    if mode == "Echo" then
+        -- neon trail segment
+        local part = Instance.new("Part"); part.Anchored=true; part.CanCollide=false; part.CanQuery=false; part.CanTouch=false
+        local d = (toCF.Position - fromCF.Position); local dist = d.Magnitude
+        if dist > 0.5 then
+            part.Size = Vector3.new(0.3,0.3,dist); part.CFrame = CFrame.lookAt(fromCF.Position + d*0.5, toCF.Position)
+            part.Material = Enum.Material.Neon; part.Color = ac(); part.Transparency = 0.1
+            pcall(function() part.Parent = Workspace end)
+            task.delay(0.5, function() pcall(function() part:Destroy() end) end)
+        end
+        pcall(function() hrp.CFrame = toCF end)
+    elseif mode == "Smooth" then
+        local dur = tonumber(O.TranslocTime or 0.15) or 0.15
+        local t0 = os.clock()
+        task.spawn(function()
+            while true do
+                local a = (os.clock() - t0) / dur
+                if a >= 1 then break end
+                local newCF = fromCF:Lerp(toCF, a)
+                pcall(function() hrp.CFrame = newCF end)
+                task.wait()
+            end
+            pcall(function() hrp.CFrame = toCF end)
+        end)
+    else
+        pcall(function() hrp.CFrame = toCF end)
+    end
+    if T.TranslocClearVel then pcall(function() hrp.AssemblyLinearVelocity = Vector3.zero end) end
+end
+
+-- key binding wire
+C(UIS.InputBegan:Connect(function(inp, gpe)
+    if gpe then return end
+    if not T.TranslocOn then return end
+    local mk = K.TranslocMarkKey and K.TranslocMarkKey.k
+    local bk = K.TranslocBlinkKey and K.TranslocBlinkKey.k
+    if mk and inp.KeyCode == mk then _translocDropMark()
+    elseif bk and inp.KeyCode == bk then _translocBlink() end
+end))
+
+local function translocTick()
+    if not T.TranslocOn then
+        if U._translocMarkPart then pcall(function() U._translocMarkPart:Destroy() end); U._translocMarkPart=nil end
+        return
+    end
+    _drawTranslocMark()
+    if U._translocMarkPart then pcall(function()
+        local sb = U._translocMarkPart:FindFirstChildOfClass("SelectionBox"); if sb then sb.Color3 = ac() end
+        U._translocMarkPart.Color = ac()
+    end) end
+end
+
+----------------------------------------------------------------
+-- ANTI-TRANSLOCATOR (detect sudden position jumps on other players)
+----------------------------------------------------------------
+U._antiTransLast = {}  -- pl -> {pos=Vector3, t=number}
+U._antiTransFlags = {}  -- pl -> {at=t, from=Vector3, to=Vector3}
+
+local function _antiTransNotify(pl, dist)
+    warn(("[UE3 anti-trans] %s jumped %d studs"):format(pl.Name, math.floor(dist)))
+end
+
+local function _antiTransSpawnTrace(fromPos, toPos, dur)
+    local part = Instance.new("Part"); part.Anchored=true; part.CanCollide=false; part.CanQuery=false; part.CanTouch=false
+    local d = (toPos - fromPos); local dist = d.Magnitude
+    if dist < 1 then return end
+    part.Size = Vector3.new(0.2,0.2,dist); part.CFrame = CFrame.lookAt(fromPos + d*0.5, toPos)
+    part.Material = Enum.Material.Neon; part.Color = Color3.fromRGB(240,70,80); part.Transparency = 0.15
+    pcall(function() part.Parent = Workspace end)
+    task.delay(dur or 2, function() pcall(function() part:Destroy() end) end)
+end
+
+local function antiTranslocTick()
+    local now = os.clock()
+    local thresh = tonumber(O.AntiTranslocDist or 25) or 25
+    local act = O.AntiTranslocAct or "Trace"
+    for _,pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LP and pl.Character then
+            local hrp = pl.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local last = U._antiTransLast[pl]
+                if last then
+                    local dt = now - last.t
+                    if dt > 0 and dt < 0.5 then
+                        local d = (hrp.Position - last.pos).Magnitude
+                        -- flag only if displacement vs small dt is huge (ignore normal walk/run ~20 studs/s)
+                        if d > thresh and d/dt > 80 then
+                            U._antiTransFlags[pl] = {at=now, from=last.pos, to=hrp.Position}
+                            if act == "Notify" then _antiTransNotify(pl, d)
+                            elseif act == "Trace" then _antiTransSpawnTrace(last.pos, hrp.Position, tonumber(O.AntiTranslocTrace or 2) or 2); _antiTransNotify(pl, d)
+                            end
+                        end
+                    end
+                end
+                U._antiTransLast[pl] = {pos=hrp.Position, t=now}
+            end
+        end
+    end
+end
+
+----------------------------------------------------------------
 -- ACTIVE-LIST SCHEDULER
 ----------------------------------------------------------------
 -- entries: {name, kind="frame"|"hz"|"gated", hz=, fn=, pred=, nextAt=0, tier=1..3}
@@ -2566,6 +2950,13 @@ local Entries = {
     {name="thud",     kind="hz",    tier=3, hz=10, fn=function() targetHudTick() end, pred=function() return T.TargetHudOn end},
     {name="hitmark",  kind="frame", tier=3, fn=function() hitMarkerTick() end, pred=function() return T.HitMarkerOn end},
     {name="ghost",    kind="hz",    tier=3, hz=20, fn=function() ghostBoxTick() end, pred=function() return T.GhostBoxOn and (O.AttackPos or "Normal") == "FakePos" end},
+    {name="rainbow",  kind="frame", tier=2, fn=rainbowTick, pred=function() return T.RainbowOn end},
+    {name="norec",    kind="frame", tier=2, fn=noRecoilTick, pred=function() return T.NoRecoil end},
+    {name="bhop",     kind="frame", tier=2, fn=bhopTick, pred=function() return T.Bhop end},
+    {name="astall",   kind="frame", tier=2, fn=airStallTick, pred=function() return T.AirStall end},
+    {name="trigger",  kind="hz",    tier=2, hz=30, fn=triggerTick, pred=function() return T.Trigger end},
+    {name="transloc", kind="hz",    tier=3, hz=10, fn=translocTick, pred=function() return T.TranslocOn end},
+    {name="antitrans",kind="hz",    tier=3, hz=10, fn=antiTranslocTick, pred=function() return T.AntiTranslocOn end},
 }
 
 local function dueGated(now, name) return true, function() end end
